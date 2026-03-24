@@ -1,0 +1,62 @@
+erDiagram
+    USER ||--o{ GROUP : "creates"
+    USER ||--o{ GROUP_MEMBER : "belongs to"
+    GROUP ||--o{ GROUP_MEMBER : "contains"
+    
+    GROUP ||--o{ EXPENSE : "hosts"
+    USER ||--o{ EXPENSE : "pays for"
+    
+    EXPENSE ||--o{ EXPENSE_PARTICIPANT : "split between"
+    USER ||--o{ EXPENSE_PARTICIPANT : "is included in"
+    
+    USER ||--o{ BALANCE : "has"
+    GROUP ||--o{ BALANCE : "tracks"
+
+    USER {
+        uuid id PK
+        string name
+        string email UK
+        string role
+        string phone_number
+        string avatar
+    }
+
+    GROUP {
+        uuid id PK
+        string name
+        string code UK
+        uuid creator_id FK
+        string description
+        datetime created_date
+    }
+
+    GROUP_MEMBER {
+        uuid user_id FK
+        uuid group_id FK
+    }
+
+    EXPENSE {
+        uuid id PK
+        uuid group_id FK
+        uuid payer_id FK
+        decimal amount
+        string description
+        string category
+        date expense_date
+        datetime created_date
+        string receipt_image
+    }
+
+    EXPENSE_PARTICIPANT {
+        uuid expense_id FK
+        uuid user_id FK
+        decimal share_amount
+    }
+
+    BALANCE {
+        uuid id PK
+        uuid user_id FK
+        uuid group_id FK
+        decimal amount_owed
+        decimal amount_to_receive
+    }

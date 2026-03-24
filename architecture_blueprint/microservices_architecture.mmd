@@ -1,0 +1,12 @@
+graph TD
+  A[Frontend App] --> B[API Gateway]
+  B --> C[Authentication Service]
+  B --> D[Group Management Service]
+  B --> E[Expense Management Service]
+  B --> F[Balance Calculation Service]
+  B --> G[Reporting Service]
+  C --> H[Auth Database]
+  D --> I[Group Database]
+  E --> J[Expense Database]
+  F --> K[Balance Database]
+  G --> L[Reporting Database]
