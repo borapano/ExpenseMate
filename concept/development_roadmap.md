@@ -11,14 +11,67 @@
 - [ ] **DB Setup:** Initialize SQLAlchemy engine with PostgreSQL.
 - [ ] **User Model:** Create `User` table with Bcrypt password hashing.
 - [ ] **Auth Logic:** Implement JWT token generation (HS256) and `OAuth2PasswordBearer`.
-- [ ] **Endpoints:** - `POST /auth/register` (Validate email uniqueness)
+- [ ] **Endpoints:**
+    - `POST /auth/register` (Validate email uniqueness)
     - `POST /auth/token` (Return access_token)
     - `GET /users/me` (Protected route for auth verification)
+    - `PUT /users/me` (Update user profile: name, phone_number, avatar)
 
 ### [1.2] Frontend Tasks
 - [ ] **Boilerplate:** React (Vite) + Tailwind CSS + Axios.
 - [ ] **State Management:** Implement `AuthContext` to persist JWT in `localStorage`.
 - [ ] **UI:** Create `LoginPage.jsx` and `RegisterPage.jsx`.
+
+
+🧩 Sprint 1.A: The Data Bedrock (Days 1–2)
+Goal: Connect to PostgreSQL and define the User Identity.
+
+Backend: * Setup database.py (SQLAlchemy engine & SessionLocal).
+
+Create models.py defining the User table (ID, Name, Email, Password_Hash, Role, Phone, Avatar).
+
+Create schemas.py using Pydantic for User Registration and User Display.
+
+Definition of Done: You can run a script that successfully creates the users table in your Postgres database.
+
+🧩 Sprint 1.B: The Security Engine (Day 3)
+Goal: Issue and verify JWTs.
+
+Backend:
+
+Implement security.py for Bcrypt hashing.
+
+Implement JWT utility functions (Create/Decode access tokens).
+
+Setup OAuth2PasswordBearer dependency to protect routes.
+
+Endpoints: Build POST /auth/register and POST /auth/token.
+
+Definition of Done: Using Postman/Swagger, you can register a user and receive a valid token back.
+
+🧩 Sprint 1.C: Frontend Shell & Auth Context (Day 4)
+Goal: Prepare the React environment to handle the token.
+
+Frontend:
+
+Initialize Vite + Tailwind.
+
+Setup api/axios.js (Include an interceptor to automatically attach the Bearer token to requests).
+
+Create AuthContext.jsx to manage user state and localStorage persistence.
+
+Definition of Done: The React app can store a dummy token and "remember" it after a page refresh.
+
+🧩 Sprint 1.D: Identity UI & Profile (Day 5)
+Goal: Connect the UI to the API.
+
+Frontend: Build LoginPage.jsx and RegisterPage.jsx using Tailwind styles from ui_style_guide.md.
+
+Backend: Build GET /users/me and PUT /users/me.
+
+Integration: Successful login redirects the user to a (currently empty) Dashboard.
+
+Definition of Done: A user can sign up, log in, and see their own name fetched from the /users/me endpoint.
 
 ---
 
@@ -32,10 +85,12 @@
 - [ ] **Endpoints:**
     - `POST /groups` (Auto-assign `creator_id` from JWT)
     - `POST /groups/join` (Body: `{ "code": "..." }`)
+    - `GET /groups` (List all groups the user belongs to)
+    - `GET /groups/{id}/members` (List all users in a group)
 
 ### [2.2] Frontend Tasks
 - [ ] **Views:** `GroupList.jsx` (Sidebar) and `CreateGroupModal.jsx`.
-- [ ] **Routing:** Protected route `/groups/:groupId`.
+- [ ] **Routing:** Protected route `/groups/:group_id`.
 
 ---
 
@@ -48,8 +103,10 @@
 - [ ] **Logic:** Implement "Equal Split" validator (verify sum of participants == total).
 - [ ] **Fields:** Ensure `expense_date` (User-set) and `created_date` (System-set).
 - [ ] **Endpoints:**
-    - `POST /expenses` (Input: total, category, date, participants[])
+    - `POST /expenses` (Input: total, category, date, payer_id, receipt_image, participants[])
     - `GET /groups/{id}/expenses` (Paginated list)
+    - `PATCH /expenses/{id}` (Edit expense & recalculate balances)
+    - `DELETE /expenses/{id}` (Remove expense & revert balances)
 
 ### [3.2] Frontend Tasks
 - [ ] **Form:** `ExpenseForm.jsx` with multi-select for group members.
@@ -74,8 +131,9 @@
 **Focus:** Data visualization.
 
 ### [5.1] Backend & Frontend
-- [ ] **Aggregation:** `GET /analytics/spending` (Group by category).
+- [ ] **Aggregation:** `GET /analytics/spending` (Group by category and member; see `analytics_architecture.md`).
 - [ ] **Visuals:** Implement `Chart.js` Pie and Bar charts for spending trends.
+- [ ] **Date Filtering:** Add date range picker for filtering analytics by period.
 
 ---
 

@@ -1,0 +1,70 @@
+# --- Environment / Sensitive Data ---
+.env
+.env.local
+.env.*.local
+.venv
+venv/
+ENV/
+env/
+*.env
+
+# --- OS Specific (Windows/WSL/Mac) ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.history/
+
+# --- Python / FastAPI Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.protodevel
+instance/
+.webassets-cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# --- Database ---
+*.db
+*.sqlite3
+# If using a local Postgres data folder for Docker:
+/pgdata/
+
+# --- Node / Frontend (React + Vite) ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+.stylelintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.parcel-cache
+.next/
+out/
+build/
+
+# --- Logs & Temp ---
+*.log
+logs/
+temp/
+tmp/
+
+# --- Architecture & Design ---
+# Only ignore auto-generated exports; keep your .mmd files!
+*.pdf
+*.png
+# !architecture/*.mmd  <-- Uncomment if you want to ensure MMDs are NEVER ignored

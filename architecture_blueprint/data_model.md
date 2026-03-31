@@ -1,5 +1,5 @@
 # Data Model
-- **User**: id, name, email, role, phone_number, avatar
+- **User**: id, name, email, password_hash, role, phone_number, avatar
 - **Group**: id, name, code, creator_id, description, created_date
 - **Group_Member**: user_id, group_id
 - **Expense**: id, group_id, amount, description, category, payer_id, expense_date, created_date, receipt_image
