@@ -1,70 +1,40 @@
-# --- Environment / Sensitive Data ---
-.env
-.env.local
-.env.*.local
-.venv
-venv/
-ENV/
-env/
-*.env
-
-# --- OS Specific (Windows/WSL/Mac) ---
+# --- OS Metadata ---
 .DS_Store
 Thumbs.db
-desktop.ini
-.vscode/
-!.vscode/settings.json
-!.vscode/extensions.json
-.history/
+.directory
 
-# --- Python / FastAPI Backend ---
+# --- Python / Backend ---
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
-.tox/
-.nox/
-.coverage
-.cache
-nosetests.xml
-coverage.xml
-*.protodevel
-instance/
-.webassets-cache
-.mypy_cache/
-.dmypy.json
-dmypy.json
+.venv/
+venv/
+ENV/
+env/
+.env
+*.log
 
-# --- Database ---
-*.db
-*.sqlite3
-# If using a local Postgres data folder for Docker:
-/pgdata/
-
-# --- Node / Frontend (React + Vite) ---
+# --- JavaScript / Frontend ---
 node_modules/
 dist/
 dist-ssr/
 *.local
 .eslintcache
-.stylelintcache
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-.parcel-cache
-.next/
-out/
-build/
 
-# --- Logs & Temp ---
-*.log
-logs/
-temp/
-tmp/
+# --- Database ---
+*.sqlite3
+*.db
+# If you ever export your Postgres data:
+*.sql
+*.dump
 
-# --- Architecture & Design ---
-# Only ignore auto-generated exports; keep your .mmd files!
-*.pdf
-*.png
-# !architecture/*.mmd  <-- Uncomment if you want to ensure MMDs are NEVER ignored
+# --- IDE / Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- AntiGravity Specific (If applicable) ---
+# Assuming AntiGravity is your deployment or proxy tool:
+.antigravity/
+antigravity.local.yaml
