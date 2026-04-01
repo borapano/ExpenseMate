@@ -1,0 +1,281 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Expense Sharing API",
+        "version": "1.0.0",
+        "description": "API for managing users, groups, expenses, balances, and analytics"
+    },
+    "paths": {
+        "/auth/register": {
+            "post": {
+                "requestBody": {
+                    "name": "string",
+                    "email": "string",
+                    "password": "string"
+                },
+                "responses": {
+                    "201": {
+                        "access_token": "string",
+                        "token_type": "bearer"
+                    }
+                }
+            }
+        },
+        "/auth/token": {
+            "post": {
+                "requestBody": {
+                    "username": "string",
+                    "password": "string"
+                },
+                "responses": {
+                    "200": {
+                        "access_token": "string",
+                        "token_type": "bearer"
+                    }
+                }
+            }
+        },
+        "/users/me": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "id": "uuid",
+                        "name": "string",
+                        "email": "string",
+                        "role": "string",
+                        "phone_number": "string",
+                        "avatar": "string"
+                    }
+                }
+            },
+            "put": {
+                "requestBody": {
+                    "name": "string",
+                    "phone_number": "string",
+                    "avatar": "string"
+                },
+                "responses": {
+                    "200": {
+                        "id": "uuid",
+                        "name": "string",
+                        "email": "string",
+                        "role": "string",
+                        "phone_number": "string",
+                        "avatar": "string"
+                    }
+                }
+            }
+        },
+        "/groups": {
+            "post": {
+                "requestBody": {
+                    "name": "string",
+                    "description": "string"
+                },
+                "responses": {
+                    "201": {
+                        "id": "uuid",
+                        "name": "string",
+                        "code": "string",
+                        "creator_id": "uuid",
+                        "description": "string",
+                        "created_date": "datetime"
+                    }
+                }
+            },
+            "get": {
+                "responses": {
+                    "200": [
+                        {
+                            "id": "uuid",
+                            "name": "string",
+                            "code": "string",
+                            "description": "string",
+                            "created_date": "datetime",
+                            "member_count": "number"
+                        }
+                    ]
+                }
+            }
+        },
+        "/groups/join": {
+            "post": {
+                "requestBody": {
+                    "code": "string"
+                },
+                "responses": {
+                    "200": {
+                        "group_id": "uuid",
+                        "group_name": "string",
+                        "message": "string"
+                    }
+                }
+            }
+        },
+        "/groups/{id}/members": {
+            "get": {
+                "responses": {
+                    "200": [
+                        {
+                            "user_id": "uuid",
+                            "name": "string",
+                            "email": "string",
+                            "avatar": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        "/expenses": {
+            "post": {
+                "requestBody": {
+                    "group_id": "uuid",
+                    "description": "string",
+                    "amount": "number",
+                    "category": "string",
+                    "payer_id": "uuid",
+                    "expense_date": "date",
+                    "receipt_image": "string",
+                    "participants": [
+                        {
+                            "user_id": "uuid",
+                            "share_amount": "number"
+                        }
+                    ]
+                },
+                "responses": {
+                    "201": {
+                        "id": "uuid",
+                        "group_id": "uuid",
+                        "payer_id": "uuid",
+                        "amount": "number",
+                        "description": "string",
+                        "category": "string",
+                        "expense_date": "date",
+                        "created_date": "datetime",
+                        "receipt_image": "string",
+                        "participants": [
+                            {
+                                "user_id": "uuid",
+                                "share_amount": "number"
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        "/groups/{id}/expenses": {
+            "get": {
+                "responses": {
+                    "200": [
+                        {
+                            "id": "uuid",
+                            "group_id": "uuid",
+                            "payer_id": "uuid",
+                            "payer_name": "string",
+                            "amount": "number",
+                            "description": "string",
+                            "category": "string",
+                            "expense_date": "date",
+                            "created_date": "datetime",
+                            "receipt_image": "string",
+                            "participant_count": "number"
+                        }
+                    ]
+                }
+            }
+        },
+        "/expenses/{id}": {
+            "patch": {
+                "requestBody": {
+                    "description": "string",
+                    "amount": "number",
+                    "category": "string",
+                    "expense_date": "date",
+                    "participants": [
+                        {
+                            "user_id": "uuid",
+                            "share_amount": "number"
+                        }
+                    ]
+                },
+                "responses": {
+                    "200": "Updated expense object"
+                }
+            },
+            "delete": {
+                "responses": {
+                    "200": {
+                        "message": "Expense deleted and balances reverted"
+                    }
+                }
+            }
+        },
+        "/groups/{id}/balances": {
+            "get": {
+                "responses": {
+                    "200": [
+                        {
+                            "user_id": "uuid",
+                            "user_name": "string",
+                            "amount_owed": "number",
+                            "amount_to_receive": "number",
+                            "net_balance": "number"
+                        }
+                    ]
+                }
+            }
+        },
+        "/settle": {
+            "post": {
+                "requestBody": {
+                    "group_id": "uuid",
+                    "to_user_id": "uuid",
+                    "amount": "number"
+                },
+                "responses": {
+                    "200": {
+                        "message": "Settlement recorded",
+                        "from_user_id": "uuid",
+                        "to_user_id": "uuid",
+                        "amount": "number",
+                        "group_id": "uuid"
+                    }
+                }
+            }
+        },
+        "/analytics/spending": {
+            "get": {
+                "queryParams": {
+                    "group_id": "uuid",
+                    "start_date": "date",
+                    "end_date": "date"
+                },
+                "responses": {
+                    "200": {
+                        "group_id": "uuid",
+                        "period": {
+                            "start_date": "date",
+                            "end_date": "date"
+                        },
+                        "total_spending": "number",
+                        "by_category": [
+                            {
+                                "category": "string",
+                                "total": "number",
+                                "percentage": "number"
+                            }
+                        ],
+                        "by_member": [
+                            {
+                                "user_id": "uuid",
+                                "user_name": "string",
+                                "total_paid": "number"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}
