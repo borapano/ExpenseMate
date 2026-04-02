@@ -64,6 +64,8 @@ class ExpenseBase(BaseModel):
     description: str = Field(..., min_length=3, max_length=255)
     category: str = Field("General", max_length=50)
     expense_date: date
+    # SHTUAR: Tashmë mund të dërgohet imazhi i faturës që në krijim
+    receipt_image: Optional[str] = None 
 
     @field_validator("expense_date")
     def validate_date(cls, v):
@@ -76,12 +78,18 @@ class ExpenseCreate(ExpenseBase):
     payer_id: UUID
     participants: List["ExpenseParticipantCreate"]
 
+    @field_validator("participants")
+    def validate_participants(cls, v):
+        if not v:
+            raise ValueError("Expense must have at least one participant")
+        return v
+
 class ExpenseOut(ExpenseBase):
     id: UUID
     group_id: UUID
     payer_id: UUID
     created_date: datetime
-    receipt_image: Optional[str] = None
+    # receipt_image trashëgohet nga ExpenseBase
     participants: List["ExpenseParticipantOut"] = []
 
     model_config = ConfigDict(from_attributes=True)
