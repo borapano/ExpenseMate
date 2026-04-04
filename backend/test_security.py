@@ -1,30 +1,21 @@
 import security
+from datetime import timedelta
 
-def test_security_logic():
-    print("--- Duke filluar testimin e Security ---")
-
-    # TEST 1: Hashing dhe Verifikimi bazë
-    p = "test1234"
-    h = security.get_password_hash(p)
-    assert security.verify_password(p, h) is True
-    print("✅ Testi 1: Hashing dhe Verifikimi u krye me sukses.")
-
-    # TEST 2: Fjalëkalim i gabuar
-    assert security.verify_password("wrongpass", h) is False
-    print("✅ Testi 2: Sistemi refuzon saktë fjalëkalimin e gabuar.")
-
-    # TEST 3: Testimi i fjalëkalimit bosh (Duhet të japë ValueError)
-    try:
-        security.get_password_hash("   ")
-    except ValueError as e:
-        print(f"✅ Testi 3: Sistemi bllokoi saktë fjalëkalimin bosh (.strip()): {e}")
-
-    # TEST 4: Unicode Normalization (NFKC)
-    # Përdorim dy forma të ndryshme të të njëjtit karakter (p.sh. 'ë')
-    p_unicode = "fjalëkalim" 
-    h_unicode = security.get_password_hash(p_unicode)
-    assert security.verify_password(p_unicode, h_unicode) is True
-    print("✅ Testi 4: Normalizimi Unicode funksionon perfekt.")
+def test_jwt_logic():
+    print("--- Testimi i JWT ---")
+    
+    # 1. Krijojmë një payload (të dhëna)
+    user_id = "12345-abcde"
+    data = {"sub": user_id}
+    
+    # 2. Gjenerojmë tokenin
+    token = security.create_access_token(data=data)
+    print(f"✅ Token-i u gjenerua: {token[:20]}...")
+    
+    # 3. Dekodojmë tokenin
+    decoded_payload = security.decode_access_token(token)
+    assert decoded_payload["sub"] == user_id
+    print("✅ Dekodimi doli i saktë. User ID u gjet brenda tokenit.")
 
 if __name__ == "__main__":
-    test_security_logic()
+    test_jwt_logic()

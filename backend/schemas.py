@@ -12,7 +12,7 @@ class UserRole(str, enum.Enum):
 
 # --- USER SCHEMAS ---
 class UserBase(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100)
+    name: str = Field(..., min_length=2, max_length=100) # Reverted to 'name' based on ERD
     email: EmailStr
     phone_number: Optional[str] = Field(None, max_length=20)
     avatar: Optional[str] = None
@@ -28,7 +28,6 @@ class UserUpdate(BaseModel):
 class UserOut(UserBase):
     id: UUID
     role: UserRole
-    created_date: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,26 +47,35 @@ class GroupOut(GroupBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-# --- EXPENSE PARTICIPANT SCHEMAS ---
-class ExpenseParticipantCreate(BaseModel):
+# --- MEMBER SCHEMAS (Shtuar për Sprint 1.B) ---
+class GroupMemberOut(BaseModel):
     user_id: UUID
-    share_amount: Decimal = Field(..., gt=0)
+    group_id: UUID
+    
+    model_config = ConfigDict(from_attributes=True)
 
-class ExpenseParticipantOut(ExpenseParticipantCreate):
+# --- EXPENSE PARTICIPANT SCHEMAS ---
+class ExpenseParticipantBase(BaseModel):
+    user_id: UUID
+    share_amount: Decimal = Field(..., gt=0, decimal_places=2)
+
+class ExpenseParticipantCreate(ExpenseParticipantBase):
+    pass
+
+class ExpenseParticipantOut(ExpenseParticipantBase):
     expense_id: UUID
-
     model_config = ConfigDict(from_attributes=True)
 
 # --- EXPENSE SCHEMAS ---
 class ExpenseBase(BaseModel):
-    amount: Decimal = Field(..., gt=0)
+    amount: Decimal = Field(..., gt=0, decimal_places=2)
     description: str = Field(..., min_length=3, max_length=255)
     category: str = Field("General", max_length=50)
     expense_date: date
-    # SHTUAR: Tashmë mund të dërgohet imazhi i faturës që në krijim
     receipt_image: Optional[str] = None 
 
     @field_validator("expense_date")
+    @classmethod
     def validate_date(cls, v):
         if v > date.today():
             raise ValueError("Expense date cannot be in the future")
@@ -76,9 +84,10 @@ class ExpenseBase(BaseModel):
 class ExpenseCreate(ExpenseBase):
     group_id: UUID
     payer_id: UUID
-    participants: List["ExpenseParticipantCreate"]
+    participants: List[ExpenseParticipantCreate]
 
     @field_validator("participants")
+    @classmethod
     def validate_participants(cls, v):
         if not v:
             raise ValueError("Expense must have at least one participant")
@@ -89,8 +98,7 @@ class ExpenseOut(ExpenseBase):
     group_id: UUID
     payer_id: UUID
     created_date: datetime
-    # receipt_image trashëgohet nga ExpenseBase
-    participants: List["ExpenseParticipantOut"] = []
+    participants: List[ExpenseParticipantOut] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,11 +107,15 @@ class BalanceOut(BaseModel):
     id: UUID
     user_id: UUID
     group_id: UUID
-    amount_owed: Decimal
-    amount_to_receive: Decimal
+    amount_owed: Decimal = Field(..., decimal_places=2)
+    amount_to_receive: Decimal = Field(..., decimal_places=2)
 
     model_config = ConfigDict(from_attributes=True)
 
-# --- FIX forward references ---
-ExpenseCreate.model_rebuild()
-ExpenseOut.model_rebuild()
+# --- AUTH SCHEMAS (Shtuar për qartësi) ---
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    user_id: Optional[str] = None
