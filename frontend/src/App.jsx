@@ -1,19 +1,26 @@
-function App() {
+import { Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+
+function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="p-10 bg-white shadow-xl rounded-2xl border border-gray-100 text-center">
-        <h1 className="text-4xl font-bold text-primary mb-4">
-          ExpenseMate 💸
-        </h1>
-        <p className="text-gray-600 mb-6">
-          Mirësevini në aplikacionin tuaj të menaxhimit të shpenzimeve.
-        </p>
-        <button className="px-6 py-2 bg-secondary text-white font-semibold rounded-lg hover:opacity-90 transition-all">
-          Nisni Tani
-        </button>
-      </div>
+    <div className="flex items-center justify-center h-screen font-bold text-2xl">
+      404 - Faqja nuk u gjet
     </div>
   )
 }
 
-export default App
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
+
+export default App;
