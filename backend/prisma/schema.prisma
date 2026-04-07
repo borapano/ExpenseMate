@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model balances {
+  id                String   @id @db.Uuid
+  user_id           String?  @db.Uuid
+  group_id          String?  @db.Uuid
+  amount_owed       Decimal? @db.Decimal(10, 2)
+  amount_to_receive Decimal? @db.Decimal(10, 2)
+  groups            groups?  @relation(fields: [group_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users             users?   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model expense_participants {
+  expense_id   String   @db.Uuid
+  user_id      String   @db.Uuid
+  share_amount Decimal  @db.Decimal(10, 2)
+  expenses     expenses @relation(fields: [expense_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users        users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([expense_id, user_id])
+}
+
+model expenses {
+  id                   String                 @id @db.Uuid
+  group_id             String?                @db.Uuid
+  payer_id             String?                @db.Uuid
+  amount               Decimal                @db.Decimal(10, 2)
+  description          String?                @db.VarChar
+  category             String?                @db.VarChar
+  expense_date         DateTime               @db.Date
+  created_date         DateTime?              @default(now()) @db.Timestamptz(6)
+  receipt_image        String?                @db.VarChar
+  expense_participants expense_participants[]
+  groups               groups?                @relation(fields: [group_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                users?                 @relation(fields: [payer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model group_members {
+  user_id  String @db.Uuid
+  group_id String @db.Uuid
+  groups   groups @relation(fields: [group_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users    users  @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([user_id, group_id])
+}
+
+model groups {
+  id            String          @id @db.Uuid
+  name          String          @db.VarChar
+  code          String          @unique(map: "ix_groups_code") @db.VarChar
+  creator_id    String?         @db.Uuid
+  description   String?         @db.VarChar
+  created_date  DateTime?       @default(now()) @db.Timestamptz(6)
+  balances      balances[]
+  expenses      expenses[]
+  group_members group_members[]
+  users         users?          @relation(fields: [creator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model users {
+  id                   String                 @id @db.Uuid
+  name                 String                 @db.VarChar
+  email                String                 @unique(map: "ix_users_email") @db.VarChar
+  password_hash        String                 @db.VarChar
+  role                 String?                @db.VarChar
+  phone_number         String?                @db.VarChar
+  avatar               String?                @db.VarChar
+  balances             balances[]
+  expense_participants expense_participants[]
+  expenses             expenses[]
+  group_members        group_members[]
+  groups               groups[]
+}

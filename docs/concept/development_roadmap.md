@@ -92,6 +92,77 @@ Definition of Done: A user can sign up, log in, and see their own name fetched f
 - [ ] **Views:** `GroupList.jsx` (Sidebar) and `CreateGroupModal.jsx`.
 - [ ] **Routing:** Protected route `/groups/:group_id`.
 
+🧩 Sprint 2.A: The Social Schema (Day 1)
+
+Goal: Create the Group structure in the database.
+
+Backend:
+	•	Update models.py: Create the Group table (id, name, description, invite_code, creator_id)
+	•	Create the GroupMember table (junction table) for the Many-to-Many relationship between Users and Groups
+
+Schemas:
+	•	Define GroupCreate and GroupOut using Pydantic
+
+Estimated time: 1 – 1.5 hours
+
+Definition of Done:
+	•	The database in Neon.tech reflects the new tables
+	•	You can manually create a group via a script
+
+⸻
+
+🧩 Sprint 2.B: The Invitation Logic (Day 2)
+
+Goal: Enable group creation and joining via unique invite codes.
+
+Backend Endpoints:
+	•	POST /groups: Creates a group and automatically adds the creator as the first member (Admin)
+	•	Implement invite code generator (6 characters, e.g. AX72RT)
+	•	POST /groups/join: Endpoint that takes a code and adds the logged-in user to that group
+
+Estimated time: 2 hours
+
+Definition of Done:
+	•	Using Swagger (/docs), you can create a group
+	•	Another user can join using the invite code
+
+⸻
+
+🧩 Sprint 2.C: Group Navigation UI (Day 3)
+
+Goal: Display groups in the frontend and allow visual creation.
+
+Frontend:
+	•	Views: Create Sidebar.jsx to list the groups the user belongs to
+	•	Modals: CreateGroupModal.jsx (simple form for name and description)
+	•	API: GET /groups to populate the sidebar list
+
+Estimated time: 2.5 hours
+
+Definition of Done:
+	•	The user sees their groups on the left side of the dashboard
+	•	The user can open a modal to create a new group
+
+⸻
+
+🧩 Sprint 2.D: Dynamic Group Views (Day 4)
+
+Goal: Create dedicated pages for each group.
+
+Frontend:
+	•	Routing: Configure dynamic route /groups/:groupId in App.jsx
+	•	Components: GroupDetail.jsx (page where members and later expenses will be displayed)
+	•	Logic: Fetch group members from backend (GET /groups/{id}/members)
+
+Backend:
+	•	Endpoint to list members of a specific group
+
+Estimated time: 2 hours
+
+Definition of Done:
+	•	Clicking a group in the sidebar navigates to its page
+	•	You can see the list of members in that group
+
 ---
 
 ## 💸 PHASE 3: TRANSACTIONAL CORE (EXPENSES)

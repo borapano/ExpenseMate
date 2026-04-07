@@ -1,25 +1,36 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import { Suspense, lazy } from 'react';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
+import { useAuth } from './AuthContext';
 
-function NotFound() {
-  return (
-    <div className="flex items-center justify-center h-screen font-bold text-2xl">
-      404 - Faqja nuk u gjet
-    </div>
-  )
+// Lazy Pages
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+
+// Mbrojtja e rrugëve me Context
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <Suspense fallback={null}>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<div className="p-10 text-center">404 - Not Found</div>} />
+      </Routes>
+    </Suspense>
   );
 }
 

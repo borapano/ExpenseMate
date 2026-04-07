@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from uuid import UUID
 import logging
@@ -14,17 +15,28 @@ logger = logging.getLogger(__name__)
 # Krijimi i tabelave
 models.Base.metadata.create_all(bind=engine)
 
-# NDRYSHIMI: Shtohet skema e sigurisë për Swagger UI
+# Krijimi i aplikacionit
 app = FastAPI(
     title="ExpenseMate API",
     description="Professional Backend for Expense Sharing - Sprint 1.B Secure Edition",
     version="1.1.0",
-    # Kjo siguron që butoni Authorize të shfaqet dhe të funksionojë saktë
     swagger_ui_parameters={"persistAuthorization": True}
 )
 
-# Konfigurimi i Sigurisë - tokenUrl duhet të jetë fiks path-i i login-it
-# Pasi ta kesh këtë, butoni Authorize do të kërkojë 'username' (email-in tënd) dhe 'password'
+# --- SHTUAR/NDRYSHUAR: KONFIGURIMI I PLOTË I CORS ---
+# Kjo zgjidh problemin e bllokimit nga browser-i (IPv4 vs IPv6)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",    # React via localhost
+        "http://127.0.0.1:5173",    # React via IP
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Konfigurimi i Sigurisë
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 # --- DEPENDENCIES ---
@@ -67,7 +79,6 @@ def login_for_access_token(
     db: Session = Depends(get_db)
 ):
     """Gjeneron JWT Access Token."""
-    # Këtu form_data.username merr vlerën e email-it nga Swagger
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not security.verify_password(form_data.password, user.password_hash):
         raise HTTPException(
@@ -83,15 +94,23 @@ def login_for_access_token(
 
 @app.post("/users/", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED, tags=["Users"])
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    """Regjistron një përdorues të ri."""
+    """Regjistron një përdorues të ri me trajtim të detajuar gabimesh."""
     try:
+        # Kontrollojmë nëse emaili ekziston para se të thërrasim CRUD (Double Check)
+        db_user = crud.get_user_by_email(db, email=user.email)
+        if db_user:
+            raise HTTPException(status_code=400, detail="Ky email është i regjistruar më parë.")
+        
         return crud.create_user(db=db, user=user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error gjatë regjistrimit: {e}")
+        raise HTTPException(status_code=500, detail="Gabim i brendshëm i serverit.")
 
 @app.get("/users/me", response_model=schemas.UserOut, tags=["Users"])
 def read_users_me(current_user: models.User = Depends(get_current_user)):
-    """Kthen profilin e përdoruesit të loguar (Testi i JWT)."""
+    """Kthen profilin e përdoruesit të loguar."""
     return current_user
 
 # --- GROUP ENDPOINTS ---
@@ -102,7 +121,7 @@ def create_group(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Krijon një grup të ri ku krijuesi shtohet automatikisht."""
+    """Krijon një grup të ri."""
     return crud.create_group(db=db, group=group, creator_id=current_user.id)
 
 # --- EXPENSE ENDPOINTS ---
@@ -113,13 +132,14 @@ def create_expense(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Regjistron një shpenzim të ri me validim sigurie."""
+    """Regjistron një shpenzim të ri me validim anëtarësie."""
     if expense.payer_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Nuk mund të regjistroni shpenzime për llogari të dikujt tjetër."
         )
 
+    # Validimi i anëtarëve të grupit
     member_ids = {m.user_id for m in db.query(models.GroupMember).filter_by(group_id=expense.group_id).all()}
     
     for p in expense.participants:
