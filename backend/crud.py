@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from uuid import uuid4, UUID
 import models
 import schemas
@@ -10,22 +11,28 @@ from fastapi import HTTPException
 # ---------------- USER CRUD ----------------
 
 def get_user_by_email(db: Session, email: str):
-    return db.query(models.User).filter(models.User.email == email).first()
+    """
+    Kërkon përdoruesin duke përdorur func.lower() për të shmangur 
+    problemet e Case-Sensitivity në Windows/WSL.
+    """
+    if not email:
+        return None
+    return db.query(models.User).filter(func.lower(models.User.email) == email.lower()).first()
 
 def create_user(db: Session, user: schemas.UserCreate):
-    # 1. Kontrollo nëse ekziston email-i
+    # 1. Kontrollo nëse ekziston email-i (gjithmonë në lowercase)
     existing_user = get_user_by_email(db, user.email)
     if existing_user:
         raise ValueError("Ky email është i regjistruar më parë.")
 
-    # 2. Hashing i sigurt i fjalëkalimit
+    # 2. Hashing i sigurt i fjalëkalimit (përdor security.py e ri)
     hashed_pass = security.get_password_hash(user.password)
 
     # 3. Krijimi i objektit të përdoruesit
     db_user = models.User(
         id=uuid4(),
         name=user.name,
-        email=user.email,
+        email=user.email.lower().strip(),  # Ruajmë email-in të pastër
         password_hash=hashed_pass,
         phone_number=user.phone_number,
         avatar=user.avatar,
@@ -46,8 +53,7 @@ def create_user(db: Session, user: schemas.UserCreate):
 def generate_unique_group_code(db: Session):
     """Gjeneron një kod unik 6-shifror dhe kontrollon nëse ekziston në DB."""
     while True:
-        # Përdor funksionin te utils.py
-        code = utils.generate_invite_code(length=6)
+        code = utils.generate_invite_code(length=6).upper()
         exists = db.query(models.Group).filter(models.Group.code == code).first()
         if not exists:
             return code
@@ -65,9 +71,8 @@ def create_group(db: Session, group: schemas.GroupCreate, creator_id: UUID):
 
     try:
         db.add(db_group)
-        db.flush()  # Rezervojmë ID-në e grupit për ta përdorur te membership
+        db.flush() 
 
-        # Shto krijuesin automatikisht si anëtarin e parë
         membership = models.GroupMember(
             user_id=creator_id,
             group_id=db_group.id
@@ -83,12 +88,11 @@ def create_group(db: Session, group: schemas.GroupCreate, creator_id: UUID):
         raise
 
 def join_group_by_code(db: Session, code: str, user_id: UUID):
-    """Bashkohet me një grup përmes kodit të ftesës."""
-    group = db.query(models.Group).filter(models.Group.code == code.upper()).first()
+    """Bashkohet me një grup përmes kodit të ftesës (Case-Insensitive)."""
+    group = db.query(models.Group).filter(models.Group.code == code.upper().strip()).first()
     if not group:
         return None
     
-    # Kontrollo nëse përdoruesi është tashmë anëtar
     already_member = db.query(models.GroupMember).filter_by(
         user_id=user_id,
         group_id=group.id
@@ -97,7 +101,6 @@ def join_group_by_code(db: Session, code: str, user_id: UUID):
     if already_member:
         return group 
 
-    # Shto anëtarin e ri
     new_member = models.GroupMember(
         user_id=user_id,
         group_id=group.id
@@ -112,13 +115,11 @@ def join_group_by_code(db: Session, code: str, user_id: UUID):
         raise e
 
 def get_user_groups(db: Session, user_id: UUID):
-    """Merr listën e të gjitha grupeve ku bën pjesë përdoruesi."""
     return db.query(models.Group).join(models.GroupMember).filter(models.GroupMember.user_id == user_id).all()
 
 # ---------------- EXPENSE CRUD ----------------
 
 def create_expense(db: Session, expense: schemas.ExpenseCreate):
-    """Krijon shpenzimin dhe regjistron pjesëmarrësit."""
     try:
         db_expense = models.Expense(
             id=uuid4(),
@@ -134,8 +135,6 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate):
         db.add(db_expense)
         db.flush() 
 
-        # Shto pjesëmarrësit (ndarja e faturës)
-        # KUJDES: Hiqet 'id=uuid4()' sepse models.py nuk ka id kolonë te kjo tabelë
         for p in expense.participants:
             participant = models.ExpenseParticipant(
                 expense_id=db_expense.id,
@@ -151,4 +150,4 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate):
     except Exception as e:
         db.rollback()
         print(f"Error creating expense: {e}")
-        raise HTTPException(status_code=400, detail="Dështoi krijimi i shpenzimit.")
+        raise HTTPException(status_code=400, detail="Të dhënat e shpenzimit janë të pasakta.")

@@ -19,22 +19,34 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
+            // 1. Përdorim URLSearchParams për formatin x-www-form-urlencoded
             const params = new URLSearchParams();
-            params.append('username', email); // FastAPI OAuth2 expects 'username'
+            // .trim() dhe .toLowerCase() janë kritike për të shmangur gabimet e shkrimit
+            params.append('username', email.trim().toLowerCase());
             params.append('password', password);
 
-            const res = await api.post('/auth/token', params);
+            // 2. Shtojmë headers specifikë që Axios të mos ketë konfuzion me CORS
+            const res = await api.post('/auth/token', params, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+
+            // 3. Ruajmë token-in dhe kalojmë në dashboard
             await login(res.data.access_token);
             navigate('/dashboard');
         } catch (err) {
+            console.error("Login Error:", err.response?.data); // Për debugging në Console
+
             const status = err.response?.status;
+            const detail = err.response?.data?.detail;
+
             if (status === 401) {
-                setError('Invalid email or password. Please try again.');
-            } else if (status === 400) {
-                const detail = err.response?.data?.detail;
-                setError(typeof detail === 'string' ? detail : 'Bad request. Please check your inputs.');
+                setError('Email ose fjalëkalim i gabuar. Ju lutem provoni përsëri.');
+            } else if (status === 422) {
+                setError('Të dhëna të papranueshme. Kontrolloni formatin e email-it.');
             } else {
-                setError('Something went wrong. Please try again.');
+                setError(typeof detail === 'string' ? detail : 'Diçka shkoi gabim. Provoni më vonë.');
             }
         } finally {
             setIsLoading(false);
@@ -43,7 +55,6 @@ export default function LoginPage() {
 
     return (
         <div className="flex flex-col md:flex-row h-screen">
-
             {/* ── LEFT: Brand Panel ── */}
             <div className="bg-primary md:w-1/2 flex flex-col items-center justify-center gap-6 py-16 px-8">
                 <Handshake className="text-accent" size={64} strokeWidth={1.5} />
@@ -55,20 +66,18 @@ export default function LoginPage() {
 
             {/* ── RIGHT: Form Panel ── */}
             <div className="bg-surface/30 md:w-1/2 flex items-center justify-center px-6 py-12">
-                <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-secondary/20">
-
-                    <h2 className="text-2xl font-bold text-primary mb-1">Welcome back</h2>
-                    <p className="text-sm text-secondary font-medium mb-8">Sign in to your account to continue</p>
+                <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-secondary/20 shadow-sm">
+                    <h2 className="text-2xl font-bold text-primary mb-1">Mirëseerdhët</h2>
+                    <p className="text-sm text-secondary font-medium mb-8">Identifikohuni në llogarinë tuaj</p>
 
                     {/* Error Banner */}
                     {error && (
-                        <div className="mb-5 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl text-center">
+                        <div className="mb-5 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl text-center animate-pulse">
                             {error}
                         </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
-
                         {/* Email */}
                         <div>
                             <label htmlFor="email" className="text-xs font-bold text-primary mb-1 block uppercase tracking-wider">
@@ -82,8 +91,8 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
-                                    placeholder="you@example.com"
-                                    className="bg-white border border-secondary/20 rounded-xl pl-9 pr-3 py-2.5 w-full focus:ring-2 focus:ring-accent focus:border-primary outline-none transition-all text-primary placeholder:text-secondary/50"
+                                    placeholder="emri@shembull.com"
+                                    className="bg-white border border-secondary/20 rounded-xl pl-9 pr-3 py-2.5 w-full focus:ring-2 focus:ring-accent focus:border-primary outline-none transition-all text-primary"
                                 />
                             </div>
                         </div>
@@ -102,7 +111,7 @@ export default function LoginPage() {
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
                                     placeholder="••••••••"
-                                    className="bg-white border border-secondary/20 rounded-xl pl-9 pr-3 py-2.5 w-full focus:ring-2 focus:ring-accent focus:border-primary outline-none transition-all text-primary placeholder:text-secondary/50"
+                                    className="bg-white border border-secondary/20 rounded-xl pl-9 pr-3 py-2.5 w-full focus:ring-2 focus:ring-accent focus:border-primary outline-none transition-all text-primary"
                                 />
                             </div>
                         </div>
@@ -116,7 +125,7 @@ export default function LoginPage() {
                             {isLoading ? (
                                 <>
                                     <Loader2 className="animate-spin" size={18} />
-                                    Signing in...
+                                    Duke u identifikuar...
                                 </>
                             ) : (
                                 'Log In'
@@ -125,9 +134,9 @@ export default function LoginPage() {
                     </form>
 
                     <p className="mt-6 text-center text-sm text-secondary">
-                        Don't have an account?{' '}
+                        Nuk keni një llogari?{' '}
                         <Link to="/register" className="text-primary font-semibold hover:underline">
-                            Create one
+                            Krijoni një të re
                         </Link>
                     </p>
                 </div>
