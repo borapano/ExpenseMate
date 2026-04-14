@@ -18,7 +18,7 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="ExpenseMate API",
     description="Professional Backend for Expense Sharing - Sprint 2.B Group Edition",
-    version="1.2.1",
+    version="1.2.2",
     swagger_ui_parameters={"persistAuthorization": True}
 )
 
@@ -26,15 +26,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",    # React via localhost
-        "http://127.0.0.1:5173",    # React via IP
+        "http://localhost:5173",    
+        "http://127.0.0.1:5173",    
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Konfigurimi i Sigurisë
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 # --- DEPENDENCIES ---
@@ -46,7 +45,6 @@ def get_db():
         db.close()
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Validon Token-in dhe kthen objektin e User-it nga DB."""
     payload = security.decode_access_token(token)
     if payload is None:
         raise HTTPException(
@@ -56,12 +54,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         )
     
     user_id_str = payload.get("sub")
-    if user_id_str is None:
-        raise HTTPException(status_code=401, detail="Token i korruptuar")
-    
     try:
         user_id = UUID(user_id_str)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         raise HTTPException(status_code=401, detail="Token i korruptuar")
         
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -76,9 +71,20 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    """Gjeneron JWT Access Token."""
-    user = crud.get_user_by_email(db, email=form_data.username)
-    if not user or not security.verify_password(form_data.password, user.password_hash):
+    # Konvertojmë email-in në lowercase për të shmangur gabimet e shkrimit
+    email_clean = form_data.username.lower().strip()
+    user = crud.get_user_by_email(db, email=email_clean)
+    
+    if not user:
+        logger.warning(f"Login dështoi: Emaili {email_clean} nuk u gjet.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email ose fjalëkalim i gabuar",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not security.verify_password(form_data.password, user.password_hash):
+        logger.warning(f"Login dështoi: Fjalëkalim i gabuar për {email_clean}.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ose fjalëkalim i gabuar",
@@ -92,8 +98,9 @@ def login_for_access_token(
 
 @app.post("/users/", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED, tags=["Users"])
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    """Regjistron një përdorues të ri."""
     try:
+        # Sigurohemi që email ruhet lowercase
+        user.email = user.email.lower().strip()
         return crud.create_user(db=db, user=user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -103,7 +110,6 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 @app.get("/users/me", response_model=schemas.UserOut, tags=["Users"])
 def read_users_me(current_user: models.User = Depends(get_current_user)):
-    """Kthen profilin e përdoruesit të loguar."""
     return current_user
 
 # --- GROUP ENDPOINTS ---
@@ -114,7 +120,6 @@ def create_group(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Krijon një grup të ri dhe shton krijuesin si anëtar."""
     try:
         return crud.create_group(db=db, group=group, creator_id=current_user.id)
     except Exception as e:
@@ -127,8 +132,7 @@ def join_group(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Bashkohet me një grup ekzistues duke përdorur kodin e ftesës."""
-    group = crud.join_group_by_code(db=db, code=data.invite_code, user_id=current_user.id)
+    group = crud.join_group_by_code(db=db, code=data.invite_code.upper().strip(), user_id=current_user.id)
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
@@ -141,7 +145,6 @@ def get_my_groups(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
-    """Liston të gjitha grupet ku bën pjesë përdoruesi aktual."""
     return crud.get_user_groups(db=db, user_id=current_user.id)
 
 @app.get("/groups/{group_id}", response_model=schemas.GroupOut, tags=["Groups"])
@@ -150,22 +153,17 @@ def get_group_details(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Kthen detajet e një grupi specifik nëse përdoruesi është anëtar."""
     group = db.query(models.Group).filter(models.Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Grupi nuk u gjet.")
 
-    # Verifikimi i anëtarësisë
     is_member = db.query(models.GroupMember).filter_by(
         group_id=group_id, 
         user_id=current_user.id
     ).first()
 
     if not is_member:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Nuk keni akses në këtë grup."
-        )
+        raise HTTPException(status_code=403, detail="Nuk keni akses në këtë grup.")
     return group
 
 # --- EXPENSE ENDPOINTS ---
@@ -176,21 +174,13 @@ def create_expense(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Regjistron një shpenzim të ri."""
     if expense.payer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Nuk mund të regjistroni shpenzime për dikë tjetër."
-        )
+        raise HTTPException(status_code=403, detail="Nuk mund të regjistroni shpenzime për dikë tjetër.")
 
-    # Validimi i pjesëmarrësve
     member_ids = {m.user_id for m in db.query(models.GroupMember).filter_by(group_id=expense.group_id).all()}
     for p in expense.participants:
         if p.user_id not in member_ids:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Përdoruesi {p.user_id} nuk është anëtar i grupit."
-            )
+            raise HTTPException(status_code=400, detail=f"Përdoruesi {p.user_id} nuk është anëtar i grupit.")
 
     try:
         return crud.create_expense(db=db, expense=expense)
