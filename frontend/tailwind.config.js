@@ -7,11 +7,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Këto mund t'i ndryshoni sipas dëshirës më vonë
-        primary: "#4F46E5",   // Indigo e bukur
-        secondary: "#10B981", // Jeshile për sukses/përfitime
-        danger: "#EF4444",    // E kuqe për shpenzimet
-        dark: "#1F2937",      // Gri e errët për tekstin
+        primary:   "#1A3263",  // Deep Navy
+        secondary: "#547792",  // Muted Blue
+        accent:    "#FFC570",  // Warm Gold
+        surface:   "#EFD2B0",  // Warm Beige
+        danger:    "#EF4444",  // Red (semantic)
       },
       container: {
         center: true,
@@ -20,7 +20,6 @@ export default {
     },
   },
   plugins: [
-    // Këto i instaluam te Hapi 1
     require("@tailwindcss/forms"),
     require("@tailwindcss/typography"),
   ],

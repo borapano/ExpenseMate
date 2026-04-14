@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
             const res = await axios.get('http://127.0.0.1:8000/users/me');
             setUser(res.data);
         } catch (err) {
-            logout(); // Nëse tokeni është i vjetër ose i gabuar, pastroje direkt
+            logout();
         } finally {
             setLoading(false);
         }
@@ -38,7 +38,6 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('token');
         delete axios.defaults.headers.common['Authorization'];
         setUser(null);
-        // Redirect bëhet në komponent, jo këtu
     };
 
     return (
@@ -48,12 +47,12 @@ export const AuthProvider = ({ children }) => {
                 login,
                 logout,
                 loading,
-                isAuthenticated: !!user
+                isAuthenticated: !!user,
             }}
         >
             {loading ? (
-                <div className="flex items-center justify-center min-h-screen">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+                <div className="flex items-center justify-center min-h-screen bg-[#EFD2B0]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1A3263]"></div>
                 </div>
             ) : (
                 children
