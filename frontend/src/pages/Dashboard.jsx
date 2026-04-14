@@ -2,16 +2,32 @@ import React, { useEffect, useState } from 'react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import {
+    LayoutDashboard,
+    Activity,
+    CreditCard,
+    Users,
+    Settings,
+    LogOut,
+    Bell,
+    TrendingUp,
+    TrendingDown
+} from 'lucide-react';
 
-// Importet e rregulluara (përdorim emërtimet e sakta që kërkon projekti yt)
 import GroupCard from '../components/GroupCard';
 import CreateGroupCard from '../components/CreateGroupCard';
 import { CreateGroupModal, JoinGroupModal } from '../components/GroupModals';
 
+const NavItem = ({ icon, label, active = false }) => (
+    <div className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${active ? 'bg-secondary/20 text-accent shadow-sm' : 'text-secondary hover:bg-white/5 hover:text-white'}`}>
+        <div className={active ? 'text-accent' : 'text-secondary/60'}>{icon}</div>
+        <span className="font-bold text-sm tracking-wide">{label}</span>
+        {active && <div className="ml-auto w-1.5 h-1.5 bg-accent rounded-full"></div>}
+    </div>
+);
+
 const Dashboard = () => {
     const { user, logout } = useAuth();
-    const navigate = useNavigate();
-
     const [groups, setGroups] = useState([]);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isJoinOpen, setIsJoinOpen] = useState(false);
@@ -21,9 +37,10 @@ const Dashboard = () => {
         try {
             setLoading(true);
             const response = await api.get('/groups/me');
-            setGroups(response.data);
+            setGroups(response.data || []);
         } catch (error) {
-            console.error("Gabim gjatë ngarkimit të grupeve:", error);
+            console.error("Error loading groups:", error);
+            setGroups([]);
         } finally {
             setLoading(false);
         }
@@ -34,127 +51,156 @@ const Dashboard = () => {
     }, []);
 
     return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+        <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
 
-            {/* --- HEADER MODERNE --- */}
-            <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30">
-                <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2 cursor-pointer transition-transform active:scale-95" onClick={() => navigate('/')}>
-                        <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                            <span className="text-white font-black text-xl italic">E</span>
-                        </div>
-                        <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                            Expense<span className="text-indigo-600">Mate</span>
-                        </h1>
+            {/* --- SIDEBAR --- */}
+            <aside className="w-64 bg-primary text-white flex flex-col hidden md:flex shrink-0">
+                <div className="p-8 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
+                        <Users className="text-accent" size={20} />
                     </div>
-
-                    {/* User Profile & Logout */}
-                    <div className="flex items-center gap-4 md:gap-8">
-                        <div className="flex items-center gap-3 bg-slate-50 p-1 pr-4 rounded-full border border-slate-100">
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white font-bold shadow-md">
-                                {user?.name?.charAt(0).toUpperCase() || "U"}
-                            </div>
-                            <div className="hidden sm:block">
-                                <p className="text-xs font-black text-slate-800 leading-none uppercase tracking-tighter">{user?.name || 'Përdorues'}</p>
-                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">Premium Plan</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={logout}
-                            className="text-xs font-black text-red-500 hover:text-white hover:bg-red-500 border-2 border-red-100 px-4 py-2 rounded-xl transition-all active:scale-90"
-                        >
-                            LOGOUT
-                        </button>
-                    </div>
+                    <span className="text-2xl font-bold tracking-tight">ExpenseMate</span>
                 </div>
-            </header>
+                <nav className="flex-1 px-4 space-y-1 mt-4">
+                    <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" active />
+                    <NavItem icon={<Activity size={19} />} label="Activity Feed" />
+                    <NavItem icon={<CreditCard size={19} />} label="Expenses" />
+                    <NavItem icon={<Users size={19} />} label="Groups" />
+                    <NavItem icon={<Settings size={19} />} label="Settings" />
+                </nav>
+                <div className="p-6 border-t border-white/5 mt-auto">
+                    <button onClick={logout} className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full group text-sm font-bold uppercase tracking-widest">
+                        <LogOut size={19} />
+                        <span>Logout</span>
+                    </button>
+                </div>
+            </aside>
 
             {/* --- MAIN CONTENT --- */}
-            <main className="max-w-7xl mx-auto px-6 py-10 space-y-12">
-
-                {/* Welcome Hero Section */}
-                <section className="bg-indigo-600 rounded-[2.5rem] p-10 md:p-16 text-white relative overflow-hidden shadow-2xl shadow-indigo-100">
-                    <div className="relative z-10 max-w-2xl">
-                        <h2 className="text-4xl md:text-5xl font-black mb-4 tracking-tight">
-                            Mirëseerdhe, {user?.name?.split(' ')[0]}! 👋
-                        </h2>
-                        <p className="text-indigo-100 text-lg font-medium opacity-90 leading-relaxed">
-                            Sistemi është gati. Menaxho shpenzimet e tua në grup me transparencë të plotë dhe thjeshtësi.
-                        </p>
+            <main className="flex-1 flex flex-col overflow-hidden">
+                <header className="px-8 py-6 flex items-center justify-between">
+                    <h2 className="text-xl font-bold">
+                        Dashboard: <span className="font-medium text-secondary text-base">Welcome back, {user?.name?.split(' ')[0] || 'User'} 👋</span>
+                    </h2>
+                    <div className="flex items-center gap-5">
+                        <button className="relative p-2 text-secondary hover:text-primary"><Bell size={22} /></button>
+                        <div className="flex items-center gap-3 bg-white p-1 pr-4 rounded-full shadow-sm border border-secondary/10">
+                            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-accent text-xs font-bold shadow-inner border border-white/10">
+                                {user?.name?.charAt(0).toUpperCase() || 'U'}
+                            </div>
+                            <span className="text-sm font-bold tracking-tight">{user?.name || 'User'}</span>
+                        </div>
                     </div>
-                    {/* Abstract Decorations */}
-                    <div className="absolute -right-10 -bottom-10 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
-                    <div className="absolute right-20 top-0 w-40 h-40 bg-indigo-400/20 rounded-full blur-2xl"></div>
-                </section>
+                </header>
 
-                {/* Groups Management */}
-                <section>
-                    <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-6">
-                        <div>
-                            <span className="text-indigo-600 font-black text-xs uppercase tracking-[0.2em] mb-2 block">Menaxhimi</span>
-                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Grupet e Mia</h2>
+                <div className="flex-1 overflow-y-auto px-8 pb-10">
+
+                    {/* Top Row: Balance & Chart */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
+                        <div className="lg:col-span-4 bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5 flex flex-col justify-between min-h-[240px]">
+                            <span className="text-lg font-bold uppercase tracking-tight text-secondary/80 text-sm">Your Net Balance</span>
+                            <div className="my-2">
+                                <span className="text-6xl font-black text-emerald-600 tracking-tighter">+45.50</span>
+                                <p className="text-emerald-700 font-bold text-xl mt-1 opacity-90">owed (credit)</p>
+                            </div>
+                            <p className="text-secondary/60 text-xs font-medium uppercase tracking-widest">Across all groups</p>
                         </div>
 
-                        <button
-                            onClick={() => setIsJoinOpen(true)}
-                            className="inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-800 px-8 py-4 rounded-2xl font-black text-sm border-2 border-slate-100 shadow-xl shadow-slate-200/50 transition-all active:scale-95 group"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4 text-indigo-600 group-hover:rotate-12 transition-transform">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
-                            </svg>
-                            BASHKOHU ME KOD
-                        </button>
-                    </div>
-
-                    {/* Grid of Groups */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                        {loading ? (
-                            // Skeleton Loading State
-                            [1, 2, 3, 4].map((n) => (
-                                <div key={n} className="h-56 bg-white border border-slate-100 rounded-[2rem] p-6 space-y-4 animate-pulse">
-                                    <div className="w-12 h-12 bg-slate-200 rounded-xl"></div>
-                                    <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                                    <div className="h-3 bg-slate-100 rounded w-1/2"></div>
-                                </div>
-                            ))
-                        ) : (
-                            <>
-                                {/* Butoni special për krijim */}
-                                <CreateGroupCard onClick={() => setIsCreateOpen(true)} />
-
-                                {/* Listimi i grupeve */}
-                                {groups.length > 0 ? (
-                                    groups.map((group) => (
-                                        <GroupCard key={group.id} group={group} />
-                                    ))
-                                ) : (
-                                    <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
-                                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-slate-300">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a5.946 5.946 0 0 0-.942 3.198l.001.031c0 .225.012.447.038.666A11.944 11.944 0 0 1 12 21c2.17 0 4.207-.576 5.963-1.584A6.062 6.062 0 0 1 18 18.719m-12 0a5.971 5.971 0 0 0 .941-3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
-                                            </svg>
+                        <div className="lg:col-span-8 bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5">
+                            <div className="flex justify-between items-start mb-6">
+                                <span className="text-lg font-bold">Monthly Spending Overview</span>
+                                <span className="text-xs font-black text-primary bg-accent/30 px-4 py-2 rounded-full uppercase tracking-tighter">Spend This Month: $180.00</span>
+                            </div>
+                            <div className="h-40 w-full flex items-end px-4 py-2 gap-3 bg-[#FAF9F6]/50 rounded-3xl pt-10">
+                                {[30, 55, 40, 95, 60, 85, 98, 80, 70, 45].map((h, i) => (
+                                    <div key={i} className="flex-1 bg-[#EBB16D] rounded-t-xl transition-all hover:bg-accent group relative shadow-sm" style={{ height: `${h}%` }}>
+                                        <div className={`absolute left-1/2 -translate-x-1/2 px-2 py-1 rounded bg-primary text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 z-10 ${h > 75 ? 'top-2' : '-top-9'}`}>
+                                            ${h * 2}
                                         </div>
-                                        <p className="text-slate-400 font-bold">Nuk keni asnjë grup ende. Filloni duke krijuar një!</p>
                                     </div>
-                                )}
-                            </>
-                        )}
+                                ))}
+                            </div>
+                        </div>
                     </div>
-                </section>
+
+                    {/* Lower Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                        <div className="lg:col-span-3">
+                            <div className="flex items-center justify-between mb-8 px-2">
+                                <h3 className="text-base font-black uppercase tracking-widest text-primary/80 italic">Group Grid</h3>
+                                <button onClick={() => setIsJoinOpen(true)} className="text-[10px] font-black uppercase tracking-widest text-secondary hover:text-primary transition-all border-b-2 border-transparent hover:border-accent">+ Join with Code</button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <CreateGroupCard onClick={() => setIsCreateOpen(true)} />
+                                {!loading && groups?.map(group => <GroupCard key={group.id} group={group} />)}
+                            </div>
+                        </div>
+
+                        {/* Action Center */}
+                        <div className="lg:col-span-2 space-y-6">
+                            <h3 className="text-base font-black uppercase tracking-widest text-primary/80 px-2 text-sm">Action Center</h3>
+
+                            {/* Financial Health */}
+                            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5">
+                                <h4 className="font-bold text-xs mb-5 uppercase tracking-wider text-secondary">Financial Health</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100/50">
+                                        <span className="text-[9px] font-black text-emerald-800/60 uppercase block mb-1 tracking-tight">Total Owed To You</span>
+                                        <span className="text-2xl font-black text-emerald-700">$120.50</span>
+                                    </div>
+                                    <div className="bg-red-50 p-5 rounded-[2rem] border border-red-100/50">
+                                        <span className="text-[9px] font-black text-red-800/60 uppercase block mb-1 tracking-tight">Total You Owe</span>
+                                        <span className="text-2xl font-black text-red-700">$75.00</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Unsettled Debts - Standardized Sentences */}
+                            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5">
+                                <h4 className="font-bold text-xs mb-5 uppercase tracking-wider text-secondary">Unsettled Debts</h4>
+                                <div className="space-y-4">
+
+                                    {/* Item 1: Someone owes you (Green Icon) */}
+                                    <div className="flex items-center justify-between p-4 bg-[#F7F4F0]/50 hover:bg-surface/20 rounded-3xl transition-all cursor-pointer group border border-transparent hover:border-secondary/10">
+                                        <div className="flex items-center gap-4 flex-1">
+                                            <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-[10px] font-black text-accent border-4 border-white shadow-sm shrink-0">JD</div>
+                                            <div className="flex flex-col min-w-0">
+                                                <p className="text-sm font-bold text-primary group-hover:translate-x-1 transition-transform leading-snug break-words">
+                                                    John Doe owes you $12.50
+                                                </p>
+                                                <p className="text-[11px] text-secondary font-medium tracking-tight opacity-70 italic mt-0.5">Weekend Trip</p>
+                                            </div>
+                                        </div>
+                                        <div className="ml-4 shrink-0">
+                                            <TrendingUp className="text-emerald-500" size={20} />
+                                        </div>
+                                    </div>
+
+                                    {/* Item 2: You owe someone (Red Icon) */}
+                                    <div className="flex items-center justify-between p-4 bg-[#F7F4F0]/50 hover:bg-surface/20 rounded-3xl transition-all cursor-pointer group border border-transparent hover:border-secondary/10">
+                                        <div className="flex items-center gap-4 flex-1">
+                                            <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center text-[10px] font-black text-primary border-4 border-white shadow-sm shrink-0">AS</div>
+                                            <div className="flex flex-col min-w-0">
+                                                <p className="text-sm font-bold text-primary group-hover:translate-x-1 transition-transform leading-snug break-words">
+                                                    You owe $45.00 to Anna Smith
+                                                </p>
+                                                <p className="text-[11px] text-secondary font-medium tracking-tight opacity-70 italic mt-0.5">Apartment 4B</p>
+                                            </div>
+                                        </div>
+                                        <div className="ml-4 shrink-0">
+                                            <TrendingDown className="text-danger" size={20} />
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </main>
 
-            {/* --- MODALET (E mbyllura si default) --- */}
-            <CreateGroupModal
-                isOpen={isCreateOpen}
-                onClose={() => setIsCreateOpen(false)}
-                onSuccess={fetchGroups}
-            />
-            <JoinGroupModal
-                isOpen={isJoinOpen}
-                onClose={() => setIsJoinOpen(false)}
-                onSuccess={fetchGroups}
-            />
-
+            <CreateGroupModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSuccess={fetchGroups} />
+            <JoinGroupModal isOpen={isJoinOpen} onClose={() => setIsJoinOpen(false)} onSuccess={fetchGroups} />
         </div>
     );
 };
