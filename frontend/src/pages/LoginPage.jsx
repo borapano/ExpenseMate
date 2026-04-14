@@ -19,36 +19,36 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            // 1. Përdorim URLSearchParams për formatin x-www-form-urlencoded
+            // 1. Using URLSearchParams for x-www-form-urlencoded format
             const params = new URLSearchParams();
-            // .trim() dhe .toLowerCase() janë kritike për të shmangur gabimet e shkrimit
+            // .trim() and .toLowerCase() are critical to avoid typing errors
             params.append('username', email.trim().toLowerCase());
             params.append('password', password);
 
-            // 2. Shtojmë headers specifikë që Axios të mos ketë konfuzion me CORS
+            // 2. Adding specific headers so Axios doesn't have CORS confusion
             const res = await api.post('/auth/token', params, {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
             });
 
-            // 3. Ruajmë token-in dhe kalojmë në dashboard
+            // 3. Save token and move to dashboard
             await login(res.data.access_token);
             navigate('/dashboard');
         } catch (err) {
-            console.error("Login Error:", err.response?.data); // Për debugging në Console
+            console.error("Login Error:", err.response?.data);
 
             const status = err.response?.status;
             const detail = err.response?.data?.detail;
 
             if (detail === 'INVALID_CREDENTIALS') {
-                setError('Email ose fjalëkalim i gabuar. Ju lutem provoni përsëri.');
+                setError('Invalid email or password. Please try again.');
             } else if (status === 401) {
-                setError('Sesioni i paautorizuar.');
+                setError('Unauthorized session.');
             } else if (status === 422) {
-                setError('Të dhëna të papranueshme. Kontrolloni formatin e email-it.');
+                setError('Unprocessable entity. Please check your email format.');
             } else {
-                setError(typeof detail === 'string' ? detail : 'Diçka shkoi gabim. Provoni më vonë.');
+                setError(typeof detail === 'string' ? detail : 'Something went wrong. Please try again later.');
             }
         } finally {
             setIsLoading(false);
@@ -69,8 +69,8 @@ export default function LoginPage() {
             {/* ── RIGHT: Form Panel ── */}
             <div className="bg-surface/30 md:w-1/2 flex items-center justify-center px-6 py-12">
                 <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-secondary/20 shadow-sm">
-                    <h2 className="text-2xl font-bold text-primary mb-1">Mirëseerdhët</h2>
-                    <p className="text-sm text-secondary font-medium mb-8">Identifikohuni në llogarinë tuaj</p>
+                    <h2 className="text-2xl font-bold text-primary mb-1">Welcome Back</h2>
+                    <p className="text-sm text-secondary font-medium mb-8">Log in to your account</p>
 
                     {/* Error Banner */}
                     {error && (
@@ -93,7 +93,7 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
-                                    placeholder="emri@shembull.com"
+                                    placeholder="name@example.com"
                                     className="bg-white border border-secondary/20 rounded-xl pl-9 pr-3 py-2.5 w-full focus:ring-2 focus:ring-accent focus:border-primary outline-none transition-all text-primary"
                                 />
                             </div>
@@ -127,7 +127,7 @@ export default function LoginPage() {
                             {isLoading ? (
                                 <>
                                     <Loader2 className="animate-spin" size={18} />
-                                    Duke u identifikuar...
+                                    Logging in...
                                 </>
                             ) : (
                                 'Log In'
@@ -136,9 +136,9 @@ export default function LoginPage() {
                     </form>
 
                     <p className="mt-6 text-center text-sm text-secondary">
-                        Nuk keni një llogari?{' '}
+                        Don't have an account?{' '}
                         <Link to="/register" className="text-primary font-semibold hover:underline">
-                            Krijoni një të re
+                            Create a new one
                         </Link>
                     </p>
                 </div>
