@@ -1,3 +1,9 @@
+import os
+from dotenv import load_dotenv
+
+# RREGULLI I ARTË: Ngarkimi i .env bëhet rreshti i parë fare
+load_dotenv()
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,16 +12,16 @@ from uuid import UUID
 import logging
 import uvicorn
 
-# Importet e tua lokale
+# Importet lokale
 import models, schemas, crud, security 
-from database import SessionLocal, engine
+from database import SessionLocal, engine, Base
 
 # --- CONFIG & LOGGING ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Krijimi i tabelave në DB
-# Shënim: Nëse ke bërë ndryshime në models.py, fshiji tabelat në Neon që të rikrijohen saktë
+# Krijimi i tabelave (Kjo ekzekutohet sa herë ndizet serveri)
+# Nëse fshive tabelat në Neon, kjo linjë i rikrijon ato automatikisht
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -25,15 +31,9 @@ app = FastAPI(
 )
 
 # --- KONFIGURIMI I CORS ---
-# I zgjeruar për të mbuluar çdo mundësi lidhjeje nga Frontendi
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",    
-        "http://127.0.0.1:5173",    
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=["*"], # Lejon çdo lidhje gjatë fazës së debugimit
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,23 +76,18 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    print(f"\n--- TENTATIVË LOGIN: {form_data.username} ---")
-    
-    # Pastrimi i email-it
+    # Pastrimi i të dhënave
     email_clean = form_data.username.lower().strip()
     user = crud.get_user_by_email(db, email=email_clean)
     
     if not user:
-        logger.warning(f"Login dështoi: Emaili {email_clean} nuk u gjet.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ose fjalëkalim i gabuar",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Verifikimi i hash-it
     if not security.verify_password(form_data.password, user.password_hash):
-        logger.warning(f"Login dështoi: Fjalëkalim i gabuar për {email_clean}.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ose fjalëkalim i gabuar",
@@ -107,13 +102,15 @@ def login_for_access_token(
 @app.post("/users/", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED, tags=["Users"])
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     try:
+        # Përpunojmë të dhënat para se t'i dërgojmë te CRUD
         user.email = user.email.lower().strip()
         return crud.create_user(db=db, user=user)
     except ValueError as e:
+        # Këtu kapet errori "Email already registered" nga crud.py
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error regjistrimi: {e}")
-        raise HTTPException(status_code=500, detail="Gabim i serverit")
+        raise HTTPException(status_code=500, detail="Gabim i brendshëm i serverit")
 
 @app.get("/users/me", response_model=schemas.UserOut, tags=["Users"])
 def read_users_me(current_user: models.User = Depends(get_current_user)):
@@ -129,7 +126,7 @@ def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db), curr
 def join_group(data: schemas.GroupJoin, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     group = crud.join_group_by_code(db=db, code=data.invite_code.upper().strip(), user_id=current_user.id)
     if not group:
-        raise HTTPException(status_code=404, detail="Kodi i gabuar")
+        raise HTTPException(status_code=404, detail="Kodi i gabuar ose grupi nuk ekziston")
     return group
 
 @app.get("/groups/me", response_model=list[schemas.GroupOut], tags=["Groups"])
@@ -140,15 +137,11 @@ def get_my_groups(db: Session = Depends(get_db), current_user: models.User = Dep
 
 @app.post("/expenses/", response_model=schemas.ExpenseOut, status_code=status.HTTP_201_CREATED, tags=["Expenses"])
 def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    if expense.payer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Veprim i paautorizuar")
     return crud.create_expense(db=db, expense=expense)
 
-# --- START SCRIPT ---
-# Kjo zgjidh problemin "Could not import module main" në Windows
+# --- DEBUG & RUN ---
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
-
-
-
-print(f"DEBUG: DATABASE_URL po lexohet si: {crud.models.settings.DATABASE_URL if hasattr(crud.models, 'settings') else 'NUK PO LEXOHET'}")
+    # Printimi i kontrollit final
+    db_url = os.getenv("DATABASE_URL")
+    print(f"\n🚀 Duke u lidhur te: {db_url[:30] if db_url else 'ASGJE'}...")
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
