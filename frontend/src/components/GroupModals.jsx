@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
-// Komponent i përbashkët për sfondin e Modal-it (Wrapper)
+// 1. Komponent i përbashkët për sfondin e Modal-it (Wrapper)
 const ModalWrapper = ({ isOpen, onClose, children }) => {
-    // Mbyll modalin me Escape
     useEffect(() => {
         const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', handleEsc);
@@ -15,11 +14,11 @@ const ModalWrapper = ({ isOpen, onClose, children }) => {
     return (
         <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px] animate-in fade-in duration-300"
-            onClick={onClose} // Mbyllet nese klikon jashte
+            onClick={onClose}
         >
             <div
                 className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200"
-                onClick={(e) => e.stopPropagation()} // Parandalon mbylljen kur klikon brenda formës
+                onClick={(e) => e.stopPropagation()}
             >
                 {children}
             </div>
@@ -27,6 +26,7 @@ const ModalWrapper = ({ isOpen, onClose, children }) => {
     );
 };
 
+// 2. MODALI PER KRIJIMIN E GRUPIT
 export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -36,13 +36,18 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.post('/groups/', { name, description });
-            onSuccess();
-            onClose();
+            // Payload-i duhet të jetë fiks 'name' dhe 'description' për FastAPI
+            await api.post('/groups/', {
+                name: name.trim(),
+                description: description.trim()
+            });
             setName('');
             setDescription('');
+            onSuccess();
+            onClose();
         } catch (err) {
-            alert(err.response?.data?.detail || "Gabim gjatë krijimit të grupit");
+            console.error("Error creating group:", err.response?.data);
+            alert(err.response?.data?.detail || "Gabim gjatë krijimit të grupit. Kontrolloni lidhjen me serverin.");
         } finally {
             setLoading(false);
         }
@@ -51,6 +56,11 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
     return (
         <ModalWrapper isOpen={isOpen} onClose={onClose}>
             <div className="text-center mb-6">
+                <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                </div>
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">Krijo një Grup</h2>
                 <p className="text-slate-500 text-sm mt-1">Nisni menaxhimin e shpenzimeve bashkë.</p>
             </div>
@@ -67,7 +77,7 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
                     />
                 </div>
                 <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 ml-1">Përshkrimi</label>
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2 ml-1">Përshkrimi (Opsional)</label>
                     <textarea
                         rows="3"
                         className="w-full px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-200 resize-none"
@@ -77,11 +87,7 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
                     />
                 </div>
                 <div className="flex gap-3 pt-2">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="flex-1 py-4 px-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-100 transition-all active:scale-95"
-                    >
+                    <button type="button" onClick={onClose} className="flex-1 py-4 px-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-100 transition-all">
                         Anulo
                     </button>
                     <button
@@ -97,22 +103,26 @@ export const CreateGroupModal = ({ isOpen, onClose, onSuccess }) => {
     );
 };
 
+// 3. MODALI PER BASHKIMIN NE GRUP
 export const JoinGroupModal = ({ isOpen, onClose, onSuccess }) => {
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleJoin = async (e) => {
         e.preventDefault();
-        if (code.length < 6) return alert("Kodi duhet të jetë 6 karaktere");
+        const cleanCode = code.trim().toUpperCase();
+        if (cleanCode.length < 6) return alert("Kodi duhet të jetë 6 karaktere");
 
         setLoading(true);
         try {
-            await api.post('/groups/join', { invite_code: code });
+            // Përdorim 'invite_code' siç e pret Backend-i te GroupJoin schema
+            await api.post('/groups/join', { invite_code: cleanCode });
+            setCode('');
             onSuccess();
             onClose();
-            setCode('');
         } catch (err) {
-            alert(err.response?.data?.detail || "Kodi është i pasaktë.");
+            console.error("Join error:", err.response?.data);
+            alert(err.response?.data?.detail || "Kodi është i pasaktë ose jeni tashmë anëtar.");
         } finally {
             setLoading(false);
         }
@@ -127,7 +137,7 @@ export const JoinGroupModal = ({ isOpen, onClose, onSuccess }) => {
             </div>
             <div className="text-center mb-8">
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">Bashkohu në Grup</h2>
-                <p className="text-slate-500 text-sm mt-1">Shkruaj kodin që të ka dërguar partneri.</p>
+                <p className="text-slate-500 text-sm mt-1">Shkruaj kodin 6-shifror që keni marrë.</p>
             </div>
 
             <form onSubmit={handleJoin} className="space-y-6">
@@ -135,7 +145,7 @@ export const JoinGroupModal = ({ isOpen, onClose, onSuccess }) => {
                     required
                     autoFocus
                     className="w-full px-4 py-5 text-center text-3xl font-black tracking-[0.5em] rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all uppercase placeholder:text-slate-200"
-                    placeholder="000000"
+                    placeholder="ABCDEF"
                     maxLength={6}
                     value={code}
                     onChange={(e) => setCode(e.target.value.toUpperCase())}

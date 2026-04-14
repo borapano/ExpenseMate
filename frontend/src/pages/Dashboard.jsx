@@ -34,13 +34,25 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
 
     const fetchGroups = async () => {
+        // --- OPTIMIZIMI I SHPEJTËSISË (CACHE) ---
+        // Marrim grupet nga memoria lokale e browser-it për t'i shfaqur INSTANT
+        const savedGroups = localStorage.getItem('mate_groups_cache');
+        if (savedGroups) {
+            setGroups(JSON.parse(savedGroups));
+            setLoading(false); // Ndalojmë spinner-in sepse kemi diçka për të treguar
+        }
+
         try {
-            setLoading(true);
             const response = await api.get('/groups/me');
-            setGroups(response.data || []);
+            const freshData = response.data || [];
+
+            setGroups(freshData);
+
+            // Ruajmë të dhënat e reja për herën tjetër
+            localStorage.setItem('mate_groups_cache', JSON.stringify(freshData));
         } catch (error) {
             console.error("Error loading groups:", error);
-            setGroups([]);
+            // Nëse dështon rrjeti, mbajmë ato që kemi
         } finally {
             setLoading(false);
         }
@@ -130,9 +142,17 @@ const Dashboard = () => {
                                 <h3 className="text-base font-black uppercase tracking-widest text-primary/80 italic">Group Grid</h3>
                                 <button onClick={() => setIsJoinOpen(true)} className="text-[10px] font-black uppercase tracking-widest text-secondary hover:text-primary transition-all border-b-2 border-transparent hover:border-accent">+ Join with Code</button>
                             </div>
+
+                            {/* Mesazhi i Loading vizual */}
+                            {loading && groups.length === 0 && (
+                                <div className="text-center py-10 text-secondary/50 font-bold animate-pulse">
+                                    Updating your groups...
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <CreateGroupCard onClick={() => setIsCreateOpen(true)} />
-                                {!loading && groups?.map(group => <GroupCard key={group.id} group={group} />)}
+                                {groups?.map(group => <GroupCard key={group.id} group={group} />)}
                             </div>
                         </div>
 
@@ -155,12 +175,10 @@ const Dashboard = () => {
                                 </div>
                             </div>
 
-                            {/* Unsettled Debts - Standardized Sentences */}
+                            {/* Unsettled Debts */}
                             <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5">
                                 <h4 className="font-bold text-xs mb-5 uppercase tracking-wider text-secondary">Unsettled Debts</h4>
                                 <div className="space-y-4">
-
-                                    {/* Item 1: Someone owes you (Green Icon) */}
                                     <div className="flex items-center justify-between p-4 bg-[#F7F4F0]/50 hover:bg-surface/20 rounded-3xl transition-all cursor-pointer group border border-transparent hover:border-secondary/10">
                                         <div className="flex items-center gap-4 flex-1">
                                             <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-[10px] font-black text-accent border-4 border-white shadow-sm shrink-0">JD</div>
@@ -175,23 +193,6 @@ const Dashboard = () => {
                                             <TrendingUp className="text-emerald-500" size={20} />
                                         </div>
                                     </div>
-
-                                    {/* Item 2: You owe someone (Red Icon) */}
-                                    <div className="flex items-center justify-between p-4 bg-[#F7F4F0]/50 hover:bg-surface/20 rounded-3xl transition-all cursor-pointer group border border-transparent hover:border-secondary/10">
-                                        <div className="flex items-center gap-4 flex-1">
-                                            <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center text-[10px] font-black text-primary border-4 border-white shadow-sm shrink-0">AS</div>
-                                            <div className="flex flex-col min-w-0">
-                                                <p className="text-sm font-bold text-primary group-hover:translate-x-1 transition-transform leading-snug break-words">
-                                                    You owe $45.00 to Anna Smith
-                                                </p>
-                                                <p className="text-[11px] text-secondary font-medium tracking-tight opacity-70 italic mt-0.5">Apartment 4B</p>
-                                            </div>
-                                        </div>
-                                        <div className="ml-4 shrink-0">
-                                            <TrendingDown className="text-danger" size={20} />
-                                        </div>
-                                    </div>
-
                                 </div>
                             </div>
                         </div>
