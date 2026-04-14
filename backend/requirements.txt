@@ -3,14 +3,19 @@ fastapi==0.110.0
 uvicorn[standard]==0.27.1
 
 # --- Database & ORM ---
+# psycopg2-binary është perfekt për zhvillim (Mac/Windows)
 sqlalchemy==2.0.27
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
 # --- Security & Auth ---
+# Kjo paketë siguron JWT (Tokenat)
 python-jose[cryptography]==3.3.0
+# Passlib merret me logjikën e hashing
 passlib[bcrypt]==1.7.4
-bcrypt==4.0.1  # Pinned: passlib 1.7.4 incompatible with bcrypt>=4.1
+# Bcrypt është "motori" - fiksuar në 4.0.1 për stabilitet cross-platform
+bcrypt==4.0.1
+# Necesor për të pranuar Login Form-data nga React
 python-multipart==0.0.9
 
 # --- Data Validation ---
