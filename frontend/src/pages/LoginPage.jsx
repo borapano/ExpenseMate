@@ -19,7 +19,7 @@ export default function LoginPage() {
             params.append('password', password);
 
             const res = await axios.post('http://127.0.0.1:8000/auth/token', params);
-            login(res.data.access_token); // Kjo rregullon çdo gjë globalisht
+            await login(res.data.access_token); // Kjo rregullon çdo gjë globalisht
             navigate('/dashboard');
         } catch (err) {
             setError('Email ose fjalëkalim i gabuar.');

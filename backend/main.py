@@ -104,6 +104,8 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         return crud.create_user(db=db, user=user)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Error gjatë regjistrimit: {e}")
         raise HTTPException(status_code=500, detail="Gabim i brendshëm i serverit.")

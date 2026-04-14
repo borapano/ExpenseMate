@@ -12,10 +12,7 @@ export const AuthProvider = ({ children }) => {
             const res = await axios.get('http://127.0.0.1:8000/users/me');
             setUser(res.data);
         } catch (err) {
-            console.error("Token i pavlefshëm ose i skaduar", err);
-            localStorage.removeItem('token');
-            delete axios.defaults.headers.common['Authorization'];
-            setUser(null);
+            logout(); // Nëse tokeni është i vjetër ose i gabuar, pastroje direkt
         } finally {
             setLoading(false);
         }
@@ -31,10 +28,10 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const login = (token) => {
+    const login = async (token) => {
         localStorage.setItem('token', token);
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        fetchUser();
+        await fetchUser();
     };
 
     const logout = () => {
