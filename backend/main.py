@@ -148,3 +148,7 @@ def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db)
 # Kjo zgjidh problemin "Could not import module main" në Windows
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+
+print(f"DEBUG: DATABASE_URL po lexohet si: {crud.models.settings.DATABASE_URL if hasattr(crud.models, 'settings') else 'NUK PO LEXOHET'}")
