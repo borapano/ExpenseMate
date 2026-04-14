@@ -9,25 +9,28 @@ import models, schemas, crud, security
 from database import SessionLocal, engine
 
 # --- CONFIG & LOGGING ---
+# Ky konfigurim do të tregojë çdo lëvizje në terminalin e Windows/Mac
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Krijimi i tabelave në DB
+# Krijimi i tabelave në DB (Neon.tech)
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="ExpenseMate API",
     description="Professional Backend for Expense Sharing - Sprint 2.B Group Edition",
-    version="1.2.2",
+    version="1.2.5",
     swagger_ui_parameters={"persistAuthorization": True}
 )
 
-# --- KONFIGURIMI I CORS ---
+# --- KONFIGURIMI I CORS (I rregulluar për Windows/WSL) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",    
         "http://127.0.0.1:5173",    
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -71,27 +74,37 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    # Konvertojmë email-in në lowercase për të shmangur gabimet e shkrimit
+    # Debug print për të parë nëse të dhënat po mbërrijnë në terminalin e Windows
+    print(f"\n--- TENTATIVË LOGIN ---")
+    print(f"Username: {form_data.username}")
+    
+    # 1. Pastrimi i email-it
     email_clean = form_data.username.lower().strip()
     user = crud.get_user_by_email(db, email=email_clean)
     
     if not user:
-        logger.warning(f"Login dështoi: Emaili {email_clean} nuk u gjet.")
+        logger.warning(f"Login dështoi: Emaili {email_clean} nuk u gjet në Neon.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ose fjalëkalim i gabuar",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if not security.verify_password(form_data.password, user.password_hash):
-        logger.warning(f"Login dështoi: Fjalëkalim i gabuar për {email_clean}.")
+    # 2. Verifikimi i fjalëkalimit
+    is_valid = security.verify_password(form_data.password, user.password_hash)
+    
+    if not is_valid:
+        logger.warning(f"Login dështoi: Fjalëkalimi nuk përputhet për {email_clean}.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ose fjalëkalim i gabuar",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # 3. Krijimi i Token-it
     access_token = security.create_access_token(data={"sub": str(user.id)})
+    logger.info(f"Login me sukses: {email_clean}")
+    
     return {"access_token": access_token, "token_type": "bearer"}
 
 # --- USER ENDPOINTS ---
@@ -99,13 +112,15 @@ def login_for_access_token(
 @app.post("/users/", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED, tags=["Users"])
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     try:
-        # Sigurohemi që email ruhet lowercase
+        # Sigurohemi që email ruhet lowercase që në fillim
         user.email = user.email.lower().strip()
+        logger.info(f"Tentativë regjistrimi për: {user.email}")
         return crud.create_user(db=db, user=user)
     except ValueError as e:
+        logger.error(f"Gabim në regjistrim (Validation): {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error gjatë regjistrimit: {e}")
+        logger.error(f"Error kritik gjatë regjistrimit: {e}")
         raise HTTPException(status_code=500, detail="Gabim i brendshëm i serverit.")
 
 @app.get("/users/me", response_model=schemas.UserOut, tags=["Users"])
