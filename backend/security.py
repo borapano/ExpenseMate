@@ -15,8 +15,7 @@ SECRET_KEY = "NDRYSHO_KETE_NE_PRODUCTION_SHUME_E_RENDESISHME"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 
 
-# Konfigurimi i Passlib - Hoqëm explicit_rounds që shkaktonte error
-# Ky konfigurim është kompatibil me Mac (Intel/M1/M2) dhe Windows/WSL
+# Konfigurimi i Passlib - Minimalist për të evituar gabimet në WSL/Windows
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto"
@@ -27,10 +26,8 @@ pwd_context = CryptContext(
 def _prepare_password(password: str) -> str:
     """
     Normalizon fjalëkalimin dhe aplikon SHA-256.
-    Garanton që hyrja për Bcrypt është gjithmonë 44 karaktere,
-    duke shmangur limitin 72-byte të bcrypt dhe problemet cross-platform.
+    Garanton që hyrja për Bcrypt është gjithmonë 44 karaktere.
     """
-    # Normalizimi NFKC parandalon dështimin e karaktereve speciale
     normalized = unicodedata.normalize("NFKC", password)
     sha256_hash = hashlib.sha256(normalized.encode("utf-8")).digest()
     return base64.b64encode(sha256_hash).decode("utf-8")
@@ -44,15 +41,29 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(prepared)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verifikon nëse fjalëkalimi përputhet, me logim gabimesh për debugging."""
+    """Verifikon fjalëkalimin me DEBUG printime për terminalin."""
     if not hashed_password:
+        print("DEBUG: hashed_password mungon!")
         return False
     try:
         prepared = _prepare_password(plain_password)
-        return pwd_context.verify(prepared, hashed_password)
+        
+        # --- DEBUG LOGS (Shiko terminalin kur bën login) ---
+        print(f"\n--- DEBUG LOGIN ATTEMPT ---")
+        print(f"1. Plain password length: {len(plain_password)}")
+        print(f"2. Prepared (SHA256) prefix: {prepared[:10]}...")
+        print(f"3. DB Hash prefix: {hashed_password[:10]}...")
+        
+        result = pwd_context.verify(prepared, hashed_password)
+        
+        print(f"4. Result: {'✅ MATCH' if result else '❌ NO MATCH'}")
+        print(f"---------------------------\n")
+        # ---------------------------------------------------
+        
+        return result
     except Exception as e:
-        # Kjo do të shfaqet në terminal nëse hash-i në DB ka format të panjohur
-        logger.error(f"Gabim gjatë verifikimit të fjalëkalimit: {e}")
+        logger.error(f"Gabim kritik gjatë verifikimit: {e}")
+        print(f"DEBUG ERROR: {e}")
         return False
 
 # --- LOGJIKA E AUTENTIKIMIT (JWT) ---
