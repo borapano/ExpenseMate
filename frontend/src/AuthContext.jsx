@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import api from './api';
 
 const AuthContext = createContext();
 
@@ -7,37 +7,40 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const fetchUser = async () => {
+    // Përdorim useCallback për të parandaluar loop-et e pafundme në useEffect
+    const logout = useCallback(() => {
+        localStorage.removeItem('token');
+        setUser(null);
+        setLoading(false);
+    }, []);
+
+    const fetchUser = useCallback(async () => {
+        const token = localStorage.getItem('token');
+
+        if (!token) {
+            setLoading(false);
+            return;
+        }
+
         try {
-            const res = await axios.get('http://127.0.0.1:8000/users/me');
+            const res = await api.get('/users/me');
             setUser(res.data);
         } catch (err) {
-            logout();
+            console.error("Auth error during fetchUser:", err);
+            logout(); // Pastron gjithçka nëse tokeni është i pavlefshëm
         } finally {
             setLoading(false);
         }
-    };
+    }, [logout]);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            fetchUser();
-        } else {
-            setLoading(false);
-        }
-    }, []);
+        fetchUser();
+    }, [fetchUser]);
 
     const login = async (token) => {
         localStorage.setItem('token', token);
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        setLoading(true);
         await fetchUser();
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        delete axios.defaults.headers.common['Authorization'];
-        setUser(null);
     };
 
     return (
@@ -50,13 +53,7 @@ export const AuthProvider = ({ children }) => {
                 isAuthenticated: !!user,
             }}
         >
-            {loading ? (
-                <div className="flex items-center justify-center min-h-screen bg-[#EFD2B0]">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1A3263]"></div>
-                </div>
-            ) : (
-                children
-            )}
+            {children}
         </AuthContext.Provider>
     );
 };

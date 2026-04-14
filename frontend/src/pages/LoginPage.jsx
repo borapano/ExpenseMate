@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
+import api from '../api';
 import { useAuth } from '../AuthContext';
 import { Handshake, Mail, Lock, Loader2 } from 'lucide-react';
 
@@ -23,7 +23,7 @@ export default function LoginPage() {
             params.append('username', email); // FastAPI OAuth2 expects 'username'
             params.append('password', password);
 
-            const res = await axios.post('http://127.0.0.1:8000/auth/token', params);
+            const res = await api.post('/auth/token', params);
             await login(res.data.access_token);
             navigate('/dashboard');
         } catch (err) {

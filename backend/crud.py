@@ -1,10 +1,11 @@
 from sqlalchemy.orm import Session
 from uuid import uuid4, UUID
-import secrets
 import models
 import schemas
 import security
+import utils 
 from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException
 
 # ---------------- USER CRUD ----------------
 
@@ -17,11 +18,10 @@ def create_user(db: Session, user: schemas.UserCreate):
     if existing_user:
         raise ValueError("Ky email është i regjistruar më parë.")
 
-    # 2. Hashing i sigurt (SHA-256 + Bcrypt nga security.py)
-    # Kjo zgjidh limitin 72-byte një herë e mirë
+    # 2. Hashing i sigurt i fjalëkalimit
     hashed_pass = security.get_password_hash(user.password)
 
-    # 3. Krijimi i objektit (Kujdes: user.username, jo user.name)
+    # 3. Krijimi i objektit të përdoruesit
     db_user = models.User(
         id=uuid4(),
         name=user.name,
@@ -44,9 +44,10 @@ def create_user(db: Session, user: schemas.UserCreate):
 # ---------------- GROUP CRUD ----------------
 
 def generate_unique_group_code(db: Session):
-    """Gjeneron një kod unik 8-shifror (psh: A4B2C8D1)."""
+    """Gjeneron një kod unik 6-shifror dhe kontrollon nëse ekziston në DB."""
     while True:
-        code = secrets.token_hex(4).upper()
+        # Përdor funksionin te utils.py
+        code = utils.generate_invite_code(length=6)
         exists = db.query(models.Group).filter(models.Group.code == code).first()
         if not exists:
             return code
@@ -64,7 +65,7 @@ def create_group(db: Session, group: schemas.GroupCreate, creator_id: UUID):
 
     try:
         db.add(db_group)
-        db.flush()  # Rezervojmë ID-në e grupit për ta përdorur te anëtarësia
+        db.flush()  # Rezervojmë ID-në e grupit për ta përdorur te membership
 
         # Shto krijuesin automatikisht si anëtarin e parë
         membership = models.GroupMember(
@@ -76,15 +77,48 @@ def create_group(db: Session, group: schemas.GroupCreate, creator_id: UUID):
         db.commit()
         db.refresh(db_group)
         return db_group
-
     except Exception as e:
         db.rollback()
         print(f"Error creating group: {e}")
         raise
 
+def join_group_by_code(db: Session, code: str, user_id: UUID):
+    """Bashkohet me një grup përmes kodit të ftesës."""
+    group = db.query(models.Group).filter(models.Group.code == code.upper()).first()
+    if not group:
+        return None
+    
+    # Kontrollo nëse përdoruesi është tashmë anëtar
+    already_member = db.query(models.GroupMember).filter_by(
+        user_id=user_id,
+        group_id=group.id
+    ).first()
+    
+    if already_member:
+        return group 
+
+    # Shto anëtarin e ri
+    new_member = models.GroupMember(
+        user_id=user_id,
+        group_id=group.id
+    )
+    try:
+        db.add(new_member)
+        db.commit()
+        db.refresh(group)
+        return group
+    except Exception as e:
+        db.rollback()
+        raise e
+
+def get_user_groups(db: Session, user_id: UUID):
+    """Merr listën e të gjitha grupeve ku bën pjesë përdoruesi."""
+    return db.query(models.Group).join(models.GroupMember).filter(models.GroupMember.user_id == user_id).all()
+
 # ---------------- EXPENSE CRUD ----------------
 
 def create_expense(db: Session, expense: schemas.ExpenseCreate):
+    """Krijon shpenzimin dhe regjistron pjesëmarrësit."""
     try:
         db_expense = models.Expense(
             id=uuid4(),
@@ -101,17 +135,14 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate):
         db.flush() 
 
         # Shto pjesëmarrësit (ndarja e faturës)
-        participants = []
+        # KUJDES: Hiqet 'id=uuid4()' sepse models.py nuk ka id kolonë te kjo tabelë
         for p in expense.participants:
             participant = models.ExpenseParticipant(
-                id=uuid4(), # Sigurohemi që çdo rresht ka ID-në e vet
                 expense_id=db_expense.id,
                 user_id=p.user_id,
                 share_amount=p.share_amount
             )
-            participants.append(participant)
-
-        db.add_all(participants)
+            db.add(participant)
 
         db.commit()
         db.refresh(db_expense)
@@ -120,4 +151,4 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate):
     except Exception as e:
         db.rollback()
         print(f"Error creating expense: {e}")
-        raise
+        raise HTTPException(status_code=400, detail="Dështoi krijimi i shpenzimit.")

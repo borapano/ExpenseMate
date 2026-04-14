@@ -12,7 +12,7 @@ class UserRole(str, enum.Enum):
 
 # --- USER SCHEMAS ---
 class UserBase(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100) # Reverted to 'name' based on ERD
+    name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
     phone_number: Optional[str] = Field(None, max_length=20)
     avatar: Optional[str] = None
@@ -39,15 +39,18 @@ class GroupBase(BaseModel):
 class GroupCreate(GroupBase):
     pass
 
+# KJO ISHTE SHTESA QE MUNGONTE
+class GroupJoin(BaseModel):
+    invite_code: str
+
 class GroupOut(GroupBase):
     id: UUID
     code: str
     creator_id: UUID
-    created_date: datetime
-
+    
     model_config = ConfigDict(from_attributes=True)
 
-# --- MEMBER SCHEMAS (Shtuar për Sprint 1.B) ---
+# --- MEMBER SCHEMAS ---
 class GroupMemberOut(BaseModel):
     user_id: UUID
     group_id: UUID
@@ -97,7 +100,6 @@ class ExpenseOut(ExpenseBase):
     id: UUID
     group_id: UUID
     payer_id: UUID
-    created_date: datetime
     participants: List[ExpenseParticipantOut] = []
 
     model_config = ConfigDict(from_attributes=True)
@@ -112,7 +114,7 @@ class BalanceOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-# --- AUTH SCHEMAS (Shtuar për qartësi) ---
+# --- AUTH SCHEMAS ---
 class Token(BaseModel):
     access_token: str
     token_type: str
