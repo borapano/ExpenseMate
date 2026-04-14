@@ -33,15 +33,15 @@ class UserOut(UserBase):
 
 # --- GROUP SCHEMAS ---
 class GroupBase(BaseModel):
+    # Kujdes: Emri duhet të jetë të paktën 3 karaktere
     name: str = Field(..., min_length=3, max_length=100)
     description: Optional[str] = Field(None, max_length=255)
 
 class GroupCreate(GroupBase):
     pass
 
-# KJO ISHTE SHTESA QE MUNGONTE
 class GroupJoin(BaseModel):
-    invite_code: str
+    invite_code: str = Field(..., min_length=6, max_length=6)
 
 class GroupOut(GroupBase):
     id: UUID
@@ -60,6 +60,7 @@ class GroupMemberOut(BaseModel):
 # --- EXPENSE PARTICIPANT SCHEMAS ---
 class ExpenseParticipantBase(BaseModel):
     user_id: UUID
+    # Shuma duhet të jetë pozitive
     share_amount: Decimal = Field(..., gt=0, decimal_places=2)
 
 class ExpenseParticipantCreate(ExpenseParticipantBase):
@@ -92,7 +93,7 @@ class ExpenseCreate(ExpenseBase):
     @field_validator("participants")
     @classmethod
     def validate_participants(cls, v):
-        if not v:
+        if not v or len(v) == 0:
             raise ValueError("Expense must have at least one participant")
         return v
 
