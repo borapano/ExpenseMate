@@ -33,7 +33,7 @@ app = FastAPI(
 # --- KONFIGURIMI I CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Lejon çdo lidhje gjatë fazës së debugimit
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,14 +83,14 @@ def login_for_access_token(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ose fjalëkalim i gabuar",
+            detail="INVALID_CREDENTIALS",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     if not security.verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ose fjalëkalim i gabuar",
+            detail="INVALID_CREDENTIALS",
             headers={"WWW-Authenticate": "Bearer"},
         )
     

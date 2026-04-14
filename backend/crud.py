@@ -36,7 +36,7 @@ def create_user(db: Session, user: schemas.UserCreate):
     existing_user = get_user_by_email(db, user.email)
     if existing_user:
         # Kjo ValueError kapet nga main.py dhe kthehet si HTTPException 400
-        raise ValueError("Ky email është i regjistruar më parë.")
+        raise ValueError("EMAIL_ALREADY_EXISTS")
 
     # 2. Hashing i sigurt (përdor security.get_password_hash)
     hashed_pass = security.get_password_hash(user.password)

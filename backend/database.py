@@ -39,7 +39,7 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_pre_ping=True,      # Kontrollon nëse lidhja është gjallë para se ta përdorë
     pool_recycle=300,        # Rifreskon lidhjen çdo 5 minuta
-    connect_args={"sslmode": "require"} if "neon.tech" in SQLALCHEMY_DATABASE_URL else {}
+    connect_args={"sslmode": "require"}
 )
 
 # 5. SESSION & BASE

@@ -58,8 +58,10 @@ export default function RegisterPage() {
             const status = err.response?.status;
             const detail = err.response?.data?.detail;
 
-            if (status === 400) {
+            if (detail === 'EMAIL_ALREADY_EXISTS') {
                 setError('An account with this email already exists.');
+            } else if (status === 400) {
+                setError('Bad request. Please check the information provided.');
             } else if (status === 401) {
                 setError('Unauthorized. Please check your credentials.');
             } else if (Array.isArray(detail)) {

@@ -41,8 +41,10 @@ export default function LoginPage() {
             const status = err.response?.status;
             const detail = err.response?.data?.detail;
 
-            if (status === 401) {
+            if (detail === 'INVALID_CREDENTIALS') {
                 setError('Email ose fjalëkalim i gabuar. Ju lutem provoni përsëri.');
+            } else if (status === 401) {
+                setError('Sesioni i paautorizuar.');
             } else if (status === 422) {
                 setError('Të dhëna të papranueshme. Kontrolloni formatin e email-it.');
             } else {
