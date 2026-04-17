@@ -38,7 +38,8 @@ class ExpenseParticipantBase(BaseModel):
     share_amount: Decimal = Field(..., gt=0, decimal_places=2)
 
 class ExpenseParticipantOut(ExpenseParticipantBase):
-    expense_id: UUID
+    user_name: Optional[str] = None 
+    is_settled: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 class ExpenseBase(BaseModel):
@@ -50,14 +51,29 @@ class ExpenseBase(BaseModel):
 
 class ExpenseCreate(ExpenseBase):
     group_id: UUID
-    payer_id: UUID
     participants: List[ExpenseParticipantBase]
+
+    @field_validator('participants')
+    @classmethod
+    def validate_total_shares(cls, participants, info):
+        total_amount = info.data.get('amount')
+        if total_amount is None:
+            return participants
+        
+        sum_shares = sum(p.share_amount for p in participants)
+        # Përdorim round për të shmangur gabimet e vogla të presjes dhjetore
+        if round(sum_shares, 2) != round(total_amount, 2):
+            raise ValueError(f"Shuma e pjesëve ({sum_shares}) duhet të jetë e barabartë me totalin ({total_amount})")
+        return participants
 
 class ExpenseOut(ExpenseBase):
     id: UUID
     group_id: UUID
-    payer_id: UUID
+    payer_id: UUID  # Kjo duhet të jetë fiks kështu që React të tregojë butonin EDIT
+    payer_name: Optional[str] = None 
     participants: List[ExpenseParticipantOut] = Field(default_factory=list)
+    created_date: datetime # Ndryshuar për t'u përputhur me models.py
+    
     model_config = ConfigDict(from_attributes=True)
 
 # --- GROUP SCHEMAS ---
@@ -75,10 +91,20 @@ class GroupOut(GroupBase):
     id: UUID
     code: str
     creator_id: UUID
-    created_at: Optional[datetime] = None 
+    created_date: datetime # NDRYSHIMI KYÇ: Ishte created_at, u bë created_date
     members: List[GroupMemberOut] = Field(default_factory=list)
-    expenses: List[ExpenseOut] = Field(default_factory=list) # SHTUAR: Për faqen e detajeve
-    total_expenses: float = 0.0
+    expenses: List[ExpenseOut] = Field(default_factory=list) 
+    total_expenses: Decimal = Decimal("0.00")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# --- BALANCE SCHEMAS ---
+class BalanceOut(BaseModel):
+    user_id: UUID
+    group_id: UUID
+    amount_owed: Decimal
+    amount_to_receive: Decimal
+    net_balance: Decimal 
     model_config = ConfigDict(from_attributes=True)
 
 # --- AUTH SCHEMAS ---

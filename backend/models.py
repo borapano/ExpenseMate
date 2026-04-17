@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, Numeric, DateTime, Date
+from sqlalchemy import Column, String, ForeignKey, Numeric, DateTime, Date, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -13,16 +13,16 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    role = Column(String, default="user") # Kthyer në String sipas ERD
+    role = Column(String, default="user")
     phone_number = Column(String, nullable=True)
     avatar = Column(String, nullable=True)
 
     # RELATIONSHIPS
     created_groups = relationship("Group", back_populates="creator")
-    memberships = relationship("GroupMember", back_populates="user")
+    memberships = relationship("GroupMember", back_populates="user", cascade="all, delete-orphan")
     expenses_paid = relationship("Expense", back_populates="payer")
-    participations = relationship("ExpenseParticipant", back_populates="user")
-    balances = relationship("Balance", back_populates="user")
+    participations = relationship("ExpenseParticipant", back_populates="user", cascade="all, delete-orphan")
+    balances = relationship("Balance", back_populates="user", cascade="all, delete-orphan")
 
 # --- 2. GROUP MODEL ---
 class Group(Base):
@@ -37,9 +37,9 @@ class Group(Base):
 
     # RELATIONSHIPS
     creator = relationship("User", back_populates="created_groups")
-    members = relationship("GroupMember", back_populates="group")
-    expenses = relationship("Expense", back_populates="group")
-    balances = relationship("Balance", back_populates="group")
+    members = relationship("GroupMember", back_populates="group", cascade="all, delete-orphan")
+    expenses = relationship("Expense", back_populates="group", cascade="all, delete-orphan")
+    balances = relationship("Balance", back_populates="group", cascade="all, delete-orphan")
 
 # --- 3. GROUP_MEMBER (Association Table) ---
 class GroupMember(Base):
@@ -57,27 +57,33 @@ class Expense(Base):
     __tablename__ = "expenses"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"))
-    payer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), nullable=False)
+    payer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    
+    # Currency: EURO (Precision 10, Scale 2)
     amount = Column(Numeric(10, 2), nullable=False)
     description = Column(String, nullable=True)
     category = Column(String, nullable=True)
-    expense_date = Column(Date, nullable=False)
+    
+    expense_date = Column(Date, nullable=False, server_default=func.current_date())
     created_date = Column(DateTime(timezone=True), server_default=func.now())
     receipt_image = Column(String, nullable=True)
 
     # RELATIONSHIPS
     group = relationship("Group", back_populates="expenses")
     payer = relationship("User", back_populates="expenses_paid")
-    participants = relationship("ExpenseParticipant", back_populates="expense")
+    participants = relationship("ExpenseParticipant", back_populates="expense", cascade="all, delete-orphan")
 
-# --- 5. EXPENSE_PARTICIPANT ---
+# --- 5. EXPENSE_PARTICIPANT (Who owes what) ---
 class ExpenseParticipant(Base):
     __tablename__ = "expense_participants"
 
     expense_id = Column(UUID(as_uuid=True), ForeignKey("expenses.id"), primary_key=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    
+    # Part of the total expense in EURO
     share_amount = Column(Numeric(10, 2), nullable=False)
+    is_settled = Column(Boolean, default=False)
 
     # RELATIONSHIPS
     expense = relationship("Expense", back_populates="participants")
@@ -90,6 +96,8 @@ class Balance(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"))
+    
+    # Net amounts in EURO
     amount_owed = Column(Numeric(10, 2), default=0.00)
     amount_to_receive = Column(Numeric(10, 2), default=0.00)
 

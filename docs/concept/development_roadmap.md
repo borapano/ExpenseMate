@@ -183,6 +183,61 @@ Definition of Done:
 - [ ] **Form:** `ExpenseForm.jsx` with multi-select for group members.
 - [ ] **Feed:** `ExpenseList.jsx` showing "Payer" vs "Date".
 
+
+🗓️ Sprint 1: Data Architecture & Integrity
+Focus: Database schema and the "Source of Truth."
+
+Day 1: Database Modeling
+
+Create Expense model (ID, GroupID, PayerID, Amount, Category, Date, Description).
+
+Create ExpenseParticipant junction table (ExpenseID, UserID, ShareAmount, IsSettled).
+
+Why: You need a separate table for participants to handle unequal splits in the future.
+
+Day 2: The Validation Logic
+
+Write a utility function/validator to ensure sum(participants.share) == expense.total.
+
+Implement created_at (server-side timestamp) vs expense_date (user-input).
+
+🗓️ Sprint 2: The CRUD API (Backend)
+Focus: Enabling the flow of data between your server and database.
+
+Day 3: Creation & Retrieval
+
+POST /expenses: Handle the complex logic of saving an expense and its participants in a single transaction.
+
+GET /groups/{id}/expenses: Implement basic pagination (e.g., 20 expenses per page) to keep the Dashboard fast.
+
+Day 4: Modifications & Cleanup
+
+PATCH /expenses/{id}: Logic to recalculate participant shares if the total amount changes.
+
+DELETE /expenses/{id}: Soft or hard delete that reverts the group's "Total Expenses" counter.
+
+🗓️ Sprint 3: User Experience (Frontend)
+Focus: Making complex financial data easy to input and read.
+
+Day 5: The Expense Entry Form
+
+Build ExpenseForm.jsx: A modal or page where users select a category, amount, and the payer.
+
+Multi-select logic: Allow users to "check" which group members are part of the expense.
+
+Tip: Default to "Split Equally" to save the user time.
+
+Day 6: The Activity Feed
+
+Build ExpenseList.jsx: Transform the raw JSON from the API into a clean list.
+
+UI Detail: Show "You paid $X" in green or "You owe $X" in red for each item.
+
+Day 7: Testing & Edge Cases
+
+Test what happens if a user tries to delete an expense they didn't create.
+
+Verify that balances update instantly on the Dashboard after adding a new expense.
 ---
 
 ## 🧠 PHASE 4: INTELLIGENCE LAYER (BALANCES)
