@@ -48,6 +48,23 @@ def create_user(db: Session, user: schemas.UserCreate):
         logger.error(f"Gabim integriteti (User): {str(e)}")
         raise ValueError("DATABASE_INTEGRITY_ERROR")
 
+def get_user_net_balance(db: Session, user_id: UUID) -> float:
+    owed_to_me = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+        .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
+        .filter(models.Expense.payer_id == user_id)\
+        .filter(models.ExpenseParticipant.user_id != user_id)\
+        .filter(models.ExpenseParticipant.is_settled == False)\
+        .scalar() or 0.0
+
+    i_owe = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+        .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
+        .filter(models.Expense.payer_id != user_id)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.ExpenseParticipant.is_settled == False)\
+        .scalar() or 0.0
+
+    return float(owed_to_me) - float(i_owe)
+
 # ---------------- GROUP CRUD ----------------
 
 def get_group(db: Session, group_id: UUID):

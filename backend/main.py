@@ -20,18 +20,20 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Sinkronizimi i Database në start
 try:
     models.Base.metadata.create_all(bind=engine)
     logger.info("✅ Database u sinkronizua me sukses.")
 except Exception as e:
     logger.error(f"❌ Gabim Database: {e}")
 
-app = FastAPI(title="ExpenseMate API", version="1.6.3")
+app = FastAPI(title="ExpenseMate API", version="1.6.4")
 
 # --- CORS ---
+# Lejojmë localhost për zhvillim (Vite përdor 5173 ose 5174)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # më fleksibël për dev
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,7 +63,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=401, detail="USER_NOT_FOUND")
     return user
 
-# 🔥 HELPER → STANDARD FORMAT (KY ESHTE SEKRETI)
+# 🔥 HELPER → FORMATIMI STANDARD (Zgjidh problemin e shfaqjes në React)
 def format_expense(expense):
     return {
         "id": str(expense.id),
@@ -72,7 +74,7 @@ def format_expense(expense):
         "description": expense.description,
         "category": expense.category,
         "expense_date": expense.expense_date,
-        "created_date": expense.created_date,
+        "created_date": expense.created_date, # ✅ Përdor datën reale të krijimit
         "participants": [
             {
                 "user_id": str(p.user_id),
@@ -105,6 +107,12 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 def me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
+# ✅ ENDPOINT-I I RI PËR BALANCËN (Zgjidh Blank Space te NetBalanceCard)
+@app.get("/users/me/balance")
+def get_my_balance(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    net_bal = crud.get_user_net_balance(db, current_user.id)
+    return {"net_balance": float(net_bal)}
+
 # --- GROUPS ---
 @app.post("/groups/", response_model=schemas.GroupOut)
 def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -136,7 +144,6 @@ def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends
             "expenses": [],
             "total_expenses": float(total)
         })
-
     return result
 
 @app.get("/groups/{group_id}", response_model=schemas.GroupOut)
@@ -150,6 +157,9 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
         raise HTTPException(403, "ACCESS_DENIED")
 
     total = db.query(func.sum(models.Expense.amount)).filter(models.Expense.group_id == group_id).scalar() or 0
+
+    # ✅ RENDITJA: Marrim shpenzimet dhe i rendisim (më të rejat lart)
+    sorted_expenses = db.query(models.Expense).filter_by(group_id=group_id).order_by(models.Expense.created_date.desc()).all()
 
     return {
         "id": str(group.id),
@@ -165,7 +175,7 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
                 "user_email": m.user.email
             } for m in group.members
         ],
-        "expenses": [format_expense(e) for e in group.expenses],
+        "expenses": [format_expense(e) for e in sorted_expenses],
         "total_expenses": float(total)
     }
 
@@ -179,9 +189,12 @@ def join_group(data: schemas.GroupJoin, db: Session = Depends(get_db), current_u
 # --- EXPENSES ---
 @app.post("/expenses/", response_model=dict)
 def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    db_expense = crud.create_expense(db, expense, current_user.id)
+    # Sigurohemi që përdoruesi është anëtar i grupit
+    is_member = db.query(models.GroupMember).filter_by(user_id=current_user.id, group_id=expense.group_id).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="NOT_A_GROUP_MEMBER")
 
-    # 🔥 KTHE FORMATIN E SAKTË
+    db_expense = crud.create_expense(db, expense, current_user.id)
     db.refresh(db_expense)
     return format_expense(db_expense)
 
@@ -190,7 +203,8 @@ def update_expense(expense_id: UUID, expense: schemas.ExpenseCreate, db: Session
     db_expense = crud.update_expense(db, expense_id, expense, current_user.id)
 
     if not db_expense:
-        raise HTTPException(404, "NOT_FOUND")
+        # Kjo mund të ndodhë nëse nuk jeni krijuesi ose shpenzimi nuk ekziston
+        raise HTTPException(404, "UPDATE_NOT_ALLOWED_OR_NOT_FOUND")
 
     db.refresh(db_expense)
     return format_expense(db_expense)
@@ -200,7 +214,7 @@ def delete_expense(expense_id: UUID, db: Session = Depends(get_db), current_user
     success = crud.delete_expense(db, expense_id, current_user.id)
 
     if not success:
-        raise HTTPException(404, "NOT_FOUND")
+        raise HTTPException(404, "DELETE_NOT_ALLOWED_OR_NOT_FOUND")
 
     return {"detail": "DELETED"}
 
