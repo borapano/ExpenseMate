@@ -7,7 +7,7 @@ import {
 
 import NetBalanceCard from '../components/NetBalanceCard';
 import FinancialHealthCard from '../components/FinancialHealthCard';
-import MonthlyGraphCard from '../components/MonthlyGraphCard'; // Importimi i komponentit të ri
+import MonthlyGraphCard from '../components/MonthlyGraphCard';
 import GroupCard from '../components/GroupCard';
 import CreateGroupCard from '../components/CreateGroupCard';
 import { CreateGroupModal, JoinGroupModal } from '../components/GroupModals';
@@ -32,25 +32,47 @@ const Dashboard = () => {
         total_owed_to_you: 0,
         total_you_owe: 0,
         monthly_spend: 0,
-        monthly_data: [] // Shtuar për të mbajtur të dhënat e grafikut
+        monthly_data: []
     });
 
     const fetchData = async () => {
         try {
             setLoading(true);
-            const groupsRes = await api.get('/groups/me');
-            setGroups(groupsRes.data || []);
 
-            // Këtu do të vijnë të dhënat reale nga backend në të ardhmen
-            setStats({
-                net_balance: 45.50,
-                total_owed_to_you: 120.50,
-                total_you_owe: -75.00,
-                monthly_spend: 180.00,
-                monthly_data: [25, 45, 30, 70, 50, 85, 95, 60, 75, 55, 40, 65]
+            // 1. Thirrja në API: Marrim të gjitha grupet ku përdoruesi është anëtar
+            const groupsRes = await api.get('/groups/me');
+            const groupsData = groupsRes.data || [];
+            setGroups(groupsData);
+
+            // 2. Llogaritja e Balancave në Frontend (duke u bazuar te të dhënat e Backend)
+            let net = 0;
+            let owedToYou = 0;
+            let youOwe = 0;
+
+            // Iterojmë nëpër grupe për të llogaritur shifrat e NetBalance dhe FinancialHealth
+            groupsData.forEach(group => {
+                // Konvertojmë user_balance në numër (backend e kthen si Decimal/String)
+                const balance = Number(group.user_balance || 0);
+
+                net += balance;
+                if (balance > 0) {
+                    owedToYou += balance;
+                } else if (balance < 0) {
+                    youOwe += Math.abs(balance);
+                }
             });
 
-            setTimeout(() => setLoading(false), 800);
+            // 3. Përditësojmë state-in me vlerat reale
+            setStats({
+                net_balance: net,
+                total_owed_to_you: owedToYou,
+                total_you_owe: youOwe,
+                monthly_spend: 0, // Kjo do të kërkojë endpoint-in e ri analytics në backend
+                monthly_data: [35, 55, 40, 75, 60, 90, 100, 65, 80, 70] // Mock për momentin
+            });
+
+            // I japim pak kohë procesit për të shmangur fluturimin e menjëhershëm të loading
+            setTimeout(() => setLoading(false), 500);
         } catch (error) {
             console.error("Error loading dashboard data:", error);
             setLoading(false);
@@ -61,6 +83,7 @@ const Dashboard = () => {
         fetchData();
     }, []);
 
+    // Global Loading Screen (mbetet i paprekur siç e kërkove)
     if (loading) {
         return (
             <div className="fixed inset-0 bg-[#F7F4F0] z-[999] flex flex-col items-center justify-center">
@@ -87,7 +110,7 @@ const Dashboard = () => {
 
     return (
         <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
-            {/* --- SIDEBAR --- */}
+            {/* SIDEBAR */}
             <aside className="w-64 bg-primary text-white flex flex-col hidden md:flex shrink-0">
                 <div className="p-8 flex items-center gap-3">
                     <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
@@ -110,7 +133,7 @@ const Dashboard = () => {
                 </div>
             </aside>
 
-            {/* --- MAIN CONTENT --- */}
+            {/* MAIN CONTENT */}
             <main className="flex-1 flex flex-col overflow-hidden">
                 <header className="px-8 py-6 flex items-center justify-between">
                     <h2 className="text-xl font-bold">
@@ -128,14 +151,14 @@ const Dashboard = () => {
                 </header>
 
                 <div className="flex-1 overflow-y-auto px-8 pb-10">
-                    {/* Rreshti i Parë: Net Balance dhe Grafiku i lidhur me komponentin e ri */}
+                    {/* Rreshti i Parë: Net Balance dhe Grafiku */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10 items-start">
                         <div className="lg:col-span-4">
+                            {/* Tani i pasojmë vlerën e llogaritur nga loop-i i API-së */}
                             <NetBalanceCard data={{ net_balance: stats.net_balance }} />
                         </div>
 
                         <div className="lg:col-span-8">
-                            {/* Zëvendësuar kodi statik me komponentin MonthlyGraphCard */}
                             <MonthlyGraphCard data={{
                                 monthly_spend: stats.monthly_spend,
                                 monthly_data: stats.monthly_data
