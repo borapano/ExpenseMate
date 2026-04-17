@@ -1,19 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import {
-    LayoutDashboard,
-    Activity,
-    CreditCard,
-    Users,
-    Settings,
-    LogOut,
-    Bell,
-    TrendingUp,
-    TrendingDown
+    LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut, Bell
 } from 'lucide-react';
 
+import NetBalanceCard from '../components/NetBalanceCard';
+import FinancialHealthCard from '../components/FinancialHealthCard';
+import MonthlyGraphCard from '../components/MonthlyGraphCard'; // Importimi i komponentit të ri
 import GroupCard from '../components/GroupCard';
 import CreateGroupCard from '../components/CreateGroupCard';
 import { CreateGroupModal, JoinGroupModal } from '../components/GroupModals';
@@ -33,22 +27,63 @@ const Dashboard = () => {
     const [isJoinOpen, setIsJoinOpen] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    const fetchGroups = async () => {
+    const [stats, setStats] = useState({
+        net_balance: 0,
+        total_owed_to_you: 0,
+        total_you_owe: 0,
+        monthly_spend: 0,
+        monthly_data: [] // Shtuar për të mbajtur të dhënat e grafikut
+    });
+
+    const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await api.get('/groups/me');
-            setGroups(response.data || []);
+            const groupsRes = await api.get('/groups/me');
+            setGroups(groupsRes.data || []);
+
+            // Këtu do të vijnë të dhënat reale nga backend në të ardhmen
+            setStats({
+                net_balance: 45.50,
+                total_owed_to_you: 120.50,
+                total_you_owe: -75.00,
+                monthly_spend: 180.00,
+                monthly_data: [25, 45, 30, 70, 50, 85, 95, 60, 75, 55, 40, 65]
+            });
+
+            setTimeout(() => setLoading(false), 800);
         } catch (error) {
-            console.error("Error loading groups:", error);
-            setGroups([]);
-        } finally {
+            console.error("Error loading dashboard data:", error);
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchGroups();
+        fetchData();
     }, []);
+
+    if (loading) {
+        return (
+            <div className="fixed inset-0 bg-[#F7F4F0] z-[999] flex flex-col items-center justify-center">
+                <div className="flex items-center gap-3 animate-pulse">
+                    <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
+                        <Users className="text-accent" size={28} />
+                    </div>
+                    <span className="text-3xl font-bold tracking-tight text-primary">ExpenseMate</span>
+                </div>
+                <div className="mt-6 w-48 h-1 bg-secondary/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-accent animate-[loading_1.5s_infinite]"></div>
+                </div>
+                <style dangerouslySetInnerHTML={{
+                    __html: `
+                    @keyframes loading {
+                        0% { width: 0%; transform: translateX(-100%); }
+                        50% { width: 100%; transform: translateX(0%); }
+                        100% { width: 0%; transform: translateX(100%); }
+                    }
+                `}} />
+            </div>
+        );
+    }
 
     return (
         <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
@@ -93,100 +128,53 @@ const Dashboard = () => {
                 </header>
 
                 <div className="flex-1 overflow-y-auto px-8 pb-10">
-                    {/* Top Row: Balance & Chart */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
-                        <div className="lg:col-span-4 bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5 flex flex-col justify-between min-h-[240px]">
-                            <span className="text-lg font-bold uppercase tracking-tight text-secondary/80 text-sm">Your Net Balance</span>
-                            <div className="my-2">
-                                <span className="text-6xl font-black text-emerald-600 tracking-tighter">+45.50</span>
-                                <p className="text-emerald-700 font-bold text-xl mt-1 opacity-90">owed (credit)</p>
-                            </div>
-                            <p className="text-secondary/60 text-xs font-medium uppercase tracking-widest">Across all groups</p>
+                    {/* Rreshti i Parë: Net Balance dhe Grafiku i lidhur me komponentin e ri */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10 items-start">
+                        <div className="lg:col-span-4">
+                            <NetBalanceCard data={{ net_balance: stats.net_balance }} />
                         </div>
 
-                        <div className="lg:col-span-8 bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5">
-                            <div className="flex justify-between items-start mb-6">
-                                <span className="text-lg font-bold">Monthly Spending Overview</span>
-                                <span className="text-xs font-black text-primary bg-accent/30 px-4 py-2 rounded-full uppercase tracking-tighter">Spend This Month: $180.00</span>
-                            </div>
-                            <div className="h-40 w-full flex items-end px-4 py-2 gap-3 bg-[#FAF9F6]/50 rounded-3xl pt-10">
-                                {[30, 55, 40, 95, 60, 85, 98, 80, 70, 45].map((h, i) => (
-                                    <div key={i} className="flex-1 bg-[#EBB16D] rounded-t-xl transition-all hover:bg-accent group relative shadow-sm" style={{ height: `${h}%` }}>
-                                        <div className={`absolute left-1/2 -translate-x-1/2 px-2 py-1 rounded bg-primary text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 z-10 ${h > 75 ? 'top-2' : '-top-9'}`}>
-                                            ${h * 2}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                        <div className="lg:col-span-8">
+                            {/* Zëvendësuar kodi statik me komponentin MonthlyGraphCard */}
+                            <MonthlyGraphCard data={{
+                                monthly_spend: stats.monthly_spend,
+                                monthly_data: stats.monthly_data
+                            }} />
                         </div>
                     </div>
 
-                    {/* Lower Section */}
-                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                    {/* Rreshti i Dytë: Grupet dhe Action Center */}
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
                         <div className="lg:col-span-3">
-                            <div className="flex items-center justify-between mb-8 px-2">
-                                <h3 className="text-base font-black uppercase tracking-widest text-primary/80 italic">Group Grid</h3>
-                                <button onClick={() => setIsJoinOpen(true)} className="text-[10px] font-black uppercase tracking-widest text-secondary hover:text-primary transition-all border-b-2 border-transparent hover:border-accent">+ Join with Code</button>
+                            <div className="flex items-center justify-between mb-8 px-2 h-[32px]">
+                                <h3 className="text-base font-black uppercase tracking-widest text-primary/80 italic leading-none">Group Grid</h3>
+                                <button onClick={() => setIsJoinOpen(true)} className="text-[10px] font-black uppercase tracking-widest text-secondary hover:text-primary transition-all border-b-2 border-transparent hover:border-accent">
+                                    + Join with Code
+                                </button>
                             </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                                 <CreateGroupCard onClick={() => setIsCreateOpen(true)} />
-                                {!loading && groups?.map(group => <GroupCard key={group.id} group={group} />)}
+                                {groups?.map(group => (
+                                    <GroupCard key={group.id} group={group} />
+                                ))}
                             </div>
                         </div>
 
-                        {/* Action Center */}
-                        <div className="lg:col-span-2 space-y-6">
-                            <h3 className="text-base font-black uppercase tracking-widest text-primary/80 px-2 text-sm">Action Center</h3>
-
-                            {/* Financial Health - Lartesia h-[180px] per nivelim fiks */}
-                            <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-secondary/5 h-[180px] flex flex-col justify-between">
-                                <h4 className="font-bold text-[10px] uppercase tracking-wider text-secondary">Financial Health</h4>
-                                <div className="grid grid-cols-2 gap-3 flex-1 items-center">
-                                    <div className="bg-emerald-50 p-4 rounded-3xl border border-emerald-100/50 flex flex-col items-center justify-center">
-                                        <span className="text-[8px] font-black text-emerald-800/60 uppercase block mb-1 tracking-tighter text-center">Total Owed To You</span>
-                                        <span className="text-xl font-black text-emerald-700">$120.50</span>
-                                    </div>
-                                    <div className="bg-red-50 p-4 rounded-3xl border border-red-100/50 flex flex-col items-center justify-center">
-                                        <span className="text-[8px] font-black text-red-800/60 uppercase block mb-1 tracking-tighter text-center">Total You Owe</span>
-                                        <span className="text-xl font-black text-red-700">$75.00</span>
-                                    </div>
-                                </div>
+                        <div className="lg:col-span-2">
+                            <div className="mb-8 px-2 h-[32px] flex items-center">
+                                <h3 className="text-base font-black uppercase tracking-widest text-primary/80 text-sm leading-none">Action Center</h3>
                             </div>
 
-                            {/* Unsettled Debts */}
-                            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5">
-                                <h4 className="font-bold text-xs mb-5 uppercase tracking-wider text-secondary">Unsettled Debts</h4>
-                                <div className="space-y-4">
-                                    {/* Item 1 */}
-                                    <div className="flex items-center justify-between p-4 bg-[#F7F4F0]/50 hover:bg-surface/20 rounded-3xl transition-all cursor-pointer group border border-transparent hover:border-secondary/10">
-                                        <div className="flex items-center gap-4 flex-1">
-                                            <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-[10px] font-black text-accent border-4 border-white shadow-sm shrink-0">JD</div>
-                                            <div className="flex flex-col min-w-0">
-                                                <p className="text-sm font-bold text-primary group-hover:translate-x-1 transition-transform leading-snug break-words">
-                                                    John Doe owes you $12.50
-                                                </p>
-                                                <p className="text-[11px] text-secondary font-medium tracking-tight opacity-70 italic mt-0.5">Weekend Trip</p>
-                                            </div>
-                                        </div>
-                                        <div className="ml-4 shrink-0">
-                                            <TrendingUp className="text-emerald-500" size={20} />
-                                        </div>
-                                    </div>
-                                    {/* Item 2 */}
-                                    <div className="flex items-center justify-between p-4 bg-[#F7F4F0]/50 hover:bg-surface/20 rounded-3xl transition-all cursor-pointer group border border-transparent hover:border-secondary/10">
-                                        <div className="flex items-center gap-4 flex-1">
-                                            <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center text-[10px] font-black text-primary border-4 border-white shadow-sm shrink-0">AS</div>
-                                            <div className="flex flex-col min-w-0">
-                                                <p className="text-sm font-bold text-primary group-hover:translate-x-1 transition-transform leading-snug break-words">
-                                                    You owe $45.00 to Anna Smith
-                                                </p>
-                                                <p className="text-[11px] text-secondary font-medium tracking-tight opacity-70 italic mt-0.5">Apartment 4B</p>
-                                            </div>
-                                        </div>
-                                        <div className="ml-4 shrink-0">
-                                            <TrendingDown className="text-danger" size={20} />
-                                        </div>
-                                    </div>
+                            <div className="space-y-6">
+                                <FinancialHealthCard
+                                    data={{
+                                        total_owed_to_you: stats.total_owed_to_you,
+                                        total_you_owe: stats.total_you_owe
+                                    }}
+                                />
+                                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5 text-center py-10 opacity-60">
+                                    <p className="text-secondary/40 text-[10px] font-bold uppercase tracking-[0.2em]">Debts List Coming Soon</p>
                                 </div>
                             </div>
                         </div>
@@ -194,8 +182,8 @@ const Dashboard = () => {
                 </div>
             </main>
 
-            <CreateGroupModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSuccess={fetchGroups} />
-            <JoinGroupModal isOpen={isJoinOpen} onClose={() => setIsJoinOpen(false)} onSuccess={fetchGroups} />
+            <CreateGroupModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSuccess={fetchData} />
+            <JoinGroupModal isOpen={isJoinOpen} onClose={() => setIsJoinOpen(false)} onSuccess={fetchData} />
         </div>
     );
 };
