@@ -20,17 +20,14 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Sinkronizimi i Database në start
 try:
     models.Base.metadata.create_all(bind=engine)
     logger.info("✅ Database u sinkronizua me sukses.")
 except Exception as e:
     logger.error(f"❌ Gabim Database: {e}")
 
-app = FastAPI(title="ExpenseMate API", version="1.6.4")
+app = FastAPI(title="ExpenseMate API", version="1.8.0")
 
-# --- CORS ---
-# Lejojmë localhost për zhvillim (Vite përdor 5173 ose 5174)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -41,7 +38,6 @@ app.add_middleware(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
-# --- DEPENDENCIES ---
 def get_db():
     db = SessionLocal()
     try:
@@ -63,7 +59,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=401, detail="USER_NOT_FOUND")
     return user
 
-# 🔥 HELPER → FORMATIMI STANDARD (Zgjidh problemin e shfaqjes në React)
 def format_expense(expense):
     return {
         "id": str(expense.id),
@@ -74,7 +69,7 @@ def format_expense(expense):
         "description": expense.description,
         "category": expense.category,
         "expense_date": expense.expense_date,
-        "created_date": expense.created_date, # ✅ Përdor datën reale të krijimit
+        "created_date": expense.created_date,
         "participants": [
             {
                 "user_id": str(p.user_id),
@@ -86,19 +81,16 @@ def format_expense(expense):
         ]
     }
 
-# --- AUTH ---
 @app.post("/auth/token")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, form_data.username)
     if not user or not security.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="INVALID_CREDENTIALS")
-
     return {
         "access_token": security.create_access_token({"sub": str(user.id)}),
         "token_type": "bearer"
     }
 
-# --- USERS ---
 @app.post("/users/", response_model=schemas.UserOut)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return crud.create_user(db, user)
@@ -107,13 +99,11 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 def me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
-# ✅ ENDPOINT-I I RI PËR BALANCËN (Zgjidh Blank Space te NetBalanceCard)
 @app.get("/users/me/balance")
 def get_my_balance(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     net_bal = crud.get_user_net_balance(db, current_user.id)
     return {"net_balance": float(net_bal)}
 
-# --- GROUPS ---
 @app.post("/groups/", response_model=schemas.GroupOut)
 def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     new_group = crud.create_group(db, group, current_user.id)
@@ -122,11 +112,9 @@ def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db), curr
 @app.get("/groups/me", response_model=List[schemas.GroupOut])
 def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     groups = crud.get_user_groups(db, current_user.id)
-
     result = []
     for g in groups:
         total = db.query(func.sum(models.Expense.amount)).filter(models.Expense.group_id == g.id).scalar() or 0
-
         result.append({
             "id": str(g.id),
             "name": g.name,
@@ -146,20 +134,40 @@ def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends
         })
     return result
 
-@app.get("/groups/{group_id}", response_model=schemas.GroupOut)
+@app.get("/groups/{group_id}")
 def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     group = db.query(models.Group).filter(models.Group.id == group_id).first()
     if not group:
         raise HTTPException(404, "GROUP_NOT_FOUND")
 
-    member = db.query(models.GroupMember).filter_by(user_id=current_user.id, group_id=group_id).first()
-    if not member:
+    member_check = db.query(models.GroupMember).filter_by(user_id=current_user.id, group_id=group_id).first()
+    if not member_check:
         raise HTTPException(403, "ACCESS_DENIED")
 
     total = db.query(func.sum(models.Expense.amount)).filter(models.Expense.group_id == group_id).scalar() or 0
-
-    # ✅ RENDITJA: Marrim shpenzimet dhe i rendisim (më të rejat lart)
     sorted_expenses = db.query(models.Expense).filter_by(group_id=group_id).order_by(models.Expense.created_date.desc()).all()
+
+    my_debts = []
+    for m in group.members:
+        if m.user_id != current_user.id:
+            i_owe = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+                .join(models.Expense).filter(models.Expense.group_id == group_id, models.Expense.payer_id == m.user_id, models.ExpenseParticipant.user_id == current_user.id, models.ExpenseParticipant.is_settled == False).scalar() or 0
+            owed_to_me = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+                .join(models.Expense).filter(models.Expense.group_id == group_id, models.Expense.payer_id == current_user.id, models.ExpenseParticipant.user_id == m.user_id, models.ExpenseParticipant.is_settled == False).scalar() or 0
+            
+            net_bal = float(i_owe) - float(owed_to_me)
+            if net_bal > 0:
+                my_debts.append({
+                    "user_id": str(m.user_id),
+                    "user_name": m.user.name,
+                    "amount": round(net_bal, 2)
+                })
+
+    pending_settlements = db.query(models.Settlement).filter(
+        models.Settlement.group_id == group_id,
+        models.Settlement.receiver_id == current_user.id,
+        models.Settlement.status == "PENDING"
+    ).all()
 
     return {
         "id": str(group.id),
@@ -168,32 +176,23 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
         "code": group.code,
         "creator_id": str(group.creator_id),
         "created_date": group.created_date,
-        "members": [
-            {
-                "user_id": str(m.user.id),
-                "user_name": m.user.name,
-                "user_email": m.user.email
-            } for m in group.members
-        ],
+        "members": [{"user_id": str(m.user.id), "user_name": m.user.name, "user_email": m.user.email} for m in group.members],
         "expenses": [format_expense(e) for e in sorted_expenses],
-        "total_expenses": float(total)
+        "total_expenses": float(total),
+        "my_debts": my_debts,
+        "pending_settlements": [{"id": str(s.id), "sender_name": s.sender.name, "amount": float(s.amount)} for s in pending_settlements]
     }
 
 @app.post("/groups/join", response_model=schemas.GroupOut)
 def join_group(data: schemas.GroupJoin, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     group = crud.join_group_by_code(db, data.invite_code, current_user.id)
-    if not group:
-        raise HTTPException(404, "INVALID_CODE")
+    if not group: raise HTTPException(404, "INVALID_CODE")
     return read_group(group.id, db, current_user)
 
-# --- EXPENSES ---
 @app.post("/expenses/", response_model=dict)
 def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # Sigurohemi që përdoruesi është anëtar i grupit
     is_member = db.query(models.GroupMember).filter_by(user_id=current_user.id, group_id=expense.group_id).first()
-    if not is_member:
-        raise HTTPException(status_code=403, detail="NOT_A_GROUP_MEMBER")
-
+    if not is_member: raise HTTPException(status_code=403, detail="NOT_A_GROUP_MEMBER")
     db_expense = crud.create_expense(db, expense, current_user.id)
     db.refresh(db_expense)
     return format_expense(db_expense)
@@ -201,23 +200,63 @@ def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db)
 @app.put("/expenses/{expense_id}", response_model=dict)
 def update_expense(expense_id: UUID, expense: schemas.ExpenseCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_expense = crud.update_expense(db, expense_id, expense, current_user.id)
-
-    if not db_expense:
-        # Kjo mund të ndodhë nëse nuk jeni krijuesi ose shpenzimi nuk ekziston
-        raise HTTPException(404, "UPDATE_NOT_ALLOWED_OR_NOT_FOUND")
-
+    if not db_expense: raise HTTPException(404, "UPDATE_NOT_ALLOWED_OR_NOT_FOUND")
     db.refresh(db_expense)
     return format_expense(db_expense)
 
 @app.delete("/expenses/{expense_id}")
 def delete_expense(expense_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     success = crud.delete_expense(db, expense_id, current_user.id)
-
-    if not success:
-        raise HTTPException(404, "DELETE_NOT_ALLOWED_OR_NOT_FOUND")
-
+    if not success: raise HTTPException(404, "DELETE_NOT_ALLOWED_OR_NOT_FOUND")
     return {"detail": "DELETED"}
 
-# --- RUN ---
+@app.post("/settlements/", response_model=dict)
+def create_settlement(settlement: schemas.SettlementCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_settlement = crud.create_settlement(db, settlement, current_user.id)
+    return {"id": str(db_settlement.id), "status": db_settlement.status, "amount": float(db_settlement.amount), "receiver_id": str(db_settlement.receiver_id)}
+
+@app.patch("/settlements/{settlement_id}/confirm")
+def confirm_settlement(settlement_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    success = crud.confirm_settlement(db, settlement_id, current_user.id)
+    if not success: raise HTTPException(status_code=400, detail="CONFIRMATION_FAILED_OR_UNAUTHORIZED")
+    return {"detail": "CONFIRMED"}
+
+@app.patch("/settlements/{settlement_id}/reject")
+def reject_settlement(settlement_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    success = crud.reject_settlement(db, settlement_id, current_user.id)
+    if not success: raise HTTPException(status_code=400, detail="REJECTION_FAILED")
+    return {"detail": "REJECTED"}
+
+# ✅ ENDPOINT I RI PËR DASHBOARD GLOBAL
+@app.get("/users/me/settlement_dashboard")
+def get_global_settlements(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    my_groups = crud.get_user_groups(db, current_user.id)
+    global_debts = []
+    
+    for g in my_groups:
+        for m in g.members:
+            if m.user_id != current_user.id:
+                i_owe = db.query(func.sum(models.ExpenseParticipant.share_amount)).join(models.Expense).filter(models.Expense.group_id == g.id, models.Expense.payer_id == m.user_id, models.ExpenseParticipant.user_id == current_user.id, models.ExpenseParticipant.is_settled == False).scalar() or 0
+                owed_to_me = db.query(func.sum(models.ExpenseParticipant.share_amount)).join(models.Expense).filter(models.Expense.group_id == g.id, models.Expense.payer_id == current_user.id, models.ExpenseParticipant.user_id == m.user_id, models.ExpenseParticipant.is_settled == False).scalar() or 0
+                net_bal = float(i_owe) - float(owed_to_me)
+                if net_bal > 0:
+                    global_debts.append({
+                        "user_id": str(m.user_id),
+                        "user_name": m.user.name,
+                        "group_name": g.name,
+                        "group_id": str(g.id),
+                        "amount": round(net_bal, 2)
+                    })
+
+    pending_requests = db.query(models.Settlement).filter(
+        models.Settlement.receiver_id == current_user.id,
+        models.Settlement.status == "PENDING"
+    ).all()
+
+    return {
+        "global_debts": global_debts,
+        "global_requests": [{"id": str(s.id), "sender_name": s.sender.name, "group_id": str(s.group_id), "amount": float(s.amount)} for s in pending_requests]
+    }
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

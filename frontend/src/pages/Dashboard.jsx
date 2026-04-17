@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 import {
-    LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut, Bell
+    LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut, Bell, CheckCircle
 } from 'lucide-react';
 
 import NetBalanceCard from '../components/NetBalanceCard';
@@ -27,6 +27,10 @@ const Dashboard = () => {
     const [isJoinOpen, setIsJoinOpen] = useState(false);
     const [loading, setLoading] = useState(true);
 
+    // States të reja për Settlements
+    const [globalDebts, setGlobalDebts] = useState([]);
+    const [globalRequests, setGlobalRequests] = useState([]);
+
     const [stats, setStats] = useState({
         net_balance: 0,
         total_owed_to_you: 0,
@@ -39,21 +43,25 @@ const Dashboard = () => {
         try {
             setLoading(true);
 
-            // 1. Thirrja në API: Marrim të gjitha grupet ku përdoruesi është anëtar
-            const groupsRes = await api.get('/groups/me');
+            // Fetch grupet dhe të dhënat e reja të Settlements njëkohësisht
+            const [groupsRes, stlRes] = await Promise.all([
+                api.get('/groups/me'),
+                api.get('/users/me/settlement_dashboard')
+            ]);
+
             const groupsData = groupsRes.data || [];
             setGroups(groupsData);
 
-            // 2. Llogaritja e Balancave në Frontend (duke u bazuar te të dhënat e Backend)
+            // Setojmë listat e borxheve nga Endpoint i ri
+            setGlobalDebts(stlRes.data.global_debts || []);
+            setGlobalRequests(stlRes.data.global_requests || []);
+
             let net = 0;
             let owedToYou = 0;
             let youOwe = 0;
 
-            // Iterojmë nëpër grupe për të llogaritur shifrat e NetBalance dhe FinancialHealth
             groupsData.forEach(group => {
-                // Konvertojmë user_balance në numër (backend e kthen si Decimal/String)
                 const balance = Number(group.user_balance || 0);
-
                 net += balance;
                 if (balance > 0) {
                     owedToYou += balance;
@@ -62,16 +70,14 @@ const Dashboard = () => {
                 }
             });
 
-            // 3. Përditësojmë state-in me vlerat reale
             setStats({
                 net_balance: net,
                 total_owed_to_you: owedToYou,
                 total_you_owe: youOwe,
-                monthly_spend: 0, // Kjo do të kërkojë endpoint-in e ri analytics në backend
-                monthly_data: [35, 55, 40, 75, 60, 90, 100, 65, 80, 70] // Mock për momentin
+                monthly_spend: 0,
+                monthly_data: [35, 55, 40, 75, 60, 90, 100, 65, 80, 70]
             });
 
-            // I japim pak kohë procesit për të shmangur fluturimin e menjëhershëm të loading
             setTimeout(() => setLoading(false), 500);
         } catch (error) {
             console.error("Error loading dashboard data:", error);
@@ -83,7 +89,25 @@ const Dashboard = () => {
         fetchData();
     }, []);
 
-    // Global Loading Screen (mbetet i paprekur siç e kërkove)
+    // Action Handlers për Settlements
+    const handleConfirmRequest = async (id) => {
+        try {
+            await api.patch(`/settlements/${id}/confirm`);
+            fetchData();
+        } catch (err) {
+            alert("Gabim në konfirmim!");
+        }
+    };
+
+    const handleRejectRequest = async (id) => {
+        try {
+            await api.patch(`/settlements/${id}/reject`);
+            fetchData();
+        } catch (err) {
+            alert("Gabim në refuzim!");
+        }
+    };
+
     if (loading) {
         return (
             <div className="fixed inset-0 bg-[#F7F4F0] z-[999] flex flex-col items-center justify-center">
@@ -154,7 +178,6 @@ const Dashboard = () => {
                     {/* Rreshti i Parë: Net Balance dhe Grafiku */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10 items-start">
                         <div className="lg:col-span-4">
-                            {/* Tani i pasojmë vlerën e llogaritur nga loop-i i API-së */}
                             <NetBalanceCard data={{ net_balance: stats.net_balance }} />
                         </div>
 
@@ -196,9 +219,63 @@ const Dashboard = () => {
                                         total_you_owe: stats.total_you_owe
                                     }}
                                 />
-                                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5 text-center py-10 opacity-60">
-                                    <p className="text-secondary/40 text-[10px] font-bold uppercase tracking-[0.2em]">Debts List Coming Soon</p>
-                                </div>
+
+                                {/* ---------------- ✅ SEKSIONI I RI I BORXHEVE ---------------- */}
+
+                                {/* Kërkesat në Pritje (Të tjerët të kanë dërguar lekë) */}
+                                {globalRequests.length > 0 && (
+                                    <div className="bg-emerald-50/50 p-6 rounded-[2.5rem] shadow-sm border border-emerald-100/50">
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-emerald-800 mb-4 flex items-center gap-2">
+                                            <CheckCircle size={14} /> Konfirmo Pagesat
+                                        </h4>
+                                        <div className="space-y-3">
+                                            {globalRequests.map(req => (
+                                                <div key={req.id} className="bg-white p-4 rounded-[1.5rem] flex flex-col gap-3 shadow-sm border border-emerald-50">
+                                                    <div>
+                                                        <p className="font-bold text-primary text-sm">{req.sender_name}</p>
+                                                        <p className="text-xs text-secondary/80">Të ka dërguar <span className="font-black text-emerald-600">{req.amount}€</span></p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => handleConfirmRequest(req.id)} className="flex-1 bg-emerald-500 text-white text-[11px] uppercase tracking-wider font-bold py-2 rounded-xl hover:bg-emerald-600 transition-colors">Konfirmo</button>
+                                                        <button onClick={() => handleRejectRequest(req.id)} className="flex-1 bg-red-500 text-white text-[11px] uppercase tracking-wider font-bold py-2 rounded-xl hover:bg-red-600 transition-colors">Refuzo</button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Borxhet Globale (Ti u detyrohesh të tjerëve) */}
+                                {globalDebts.length > 0 && (
+                                    <div className="bg-red-50/50 p-6 rounded-[2.5rem] shadow-sm border border-red-100/50 mt-6">
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-red-800 mb-4 flex items-center gap-2">
+                                            <CreditCard size={14} /> Borxhet e Mia
+                                        </h4>
+                                        <div className="space-y-3">
+                                            {globalDebts.map(debt => (
+                                                <div key={`${debt.group_id}-${debt.user_id}`} className="bg-white p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-red-50">
+                                                    <div>
+                                                        <p className="font-bold text-primary text-sm">{debt.user_name}</p>
+                                                        <p className="text-xs text-secondary/80">Në: {debt.group_name}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-black text-red-600">{debt.amount}€</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Nëse s'ka borxhe ose kërkesa, shfaqim një mesazh pozitiv */}
+                                {globalRequests.length === 0 && globalDebts.length === 0 && (
+                                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5 text-center py-10 opacity-60">
+                                        <p className="text-secondary/40 text-[10px] font-bold uppercase tracking-[0.2em]">Të gjitha borxhet janë të shlyera</p>
+                                    </div>
+                                )}
+
+                                {/* ----------------------------------------------------------------- */}
+
                             </div>
                         </div>
                     </div>

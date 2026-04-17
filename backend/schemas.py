@@ -10,6 +10,12 @@ class UserRole(str, enum.Enum):
     admin = "admin"
     user = "user"
 
+# ✅ Statuset e reja për Settlement
+class SettlementStatus(str, enum.Enum):
+    pending = "PENDING"
+    confirmed = "CONFIRMED"
+    rejected = "REJECTED"
+
 # --- USER SCHEMAS ---
 class UserBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
@@ -61,7 +67,6 @@ class ExpenseCreate(ExpenseBase):
             return participants
         
         sum_shares = sum(p.share_amount for p in participants)
-        # Përdorim round për të shmangur gabimet e vogla të presjes dhjetore
         if round(sum_shares, 2) != round(total_amount, 2):
             raise ValueError(f"Shuma e pjesëve ({sum_shares}) duhet të jetë e barabartë me totalin ({total_amount})")
         return participants
@@ -69,10 +74,10 @@ class ExpenseCreate(ExpenseBase):
 class ExpenseOut(ExpenseBase):
     id: UUID
     group_id: UUID
-    payer_id: UUID  # Kjo duhet të jetë fiks kështu që React të tregojë butonin EDIT
+    payer_id: UUID 
     payer_name: Optional[str] = None 
     participants: List[ExpenseParticipantOut] = Field(default_factory=list)
-    created_date: datetime # Ndryshuar për t'u përputhur me models.py
+    created_date: datetime 
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,10 +96,30 @@ class GroupOut(GroupBase):
     id: UUID
     code: str
     creator_id: UUID
-    created_date: datetime # NDRYSHIMI KYÇ: Ishte created_at, u bë created_date
+    created_date: datetime 
     members: List[GroupMemberOut] = Field(default_factory=list)
     expenses: List[ExpenseOut] = Field(default_factory=list) 
     total_expenses: Decimal = Decimal("0.00")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# --- ✅ SETTLEMENT SCHEMAS (Faza 5) ---
+
+class SettlementBase(BaseModel):
+    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    group_id: UUID
+    receiver_id: UUID
+
+class SettlementCreate(SettlementBase):
+    pass
+
+class SettlementOut(SettlementBase):
+    id: UUID
+    sender_id: UUID
+    sender_name: Optional[str] = None
+    receiver_name: Optional[str] = None
+    status: SettlementStatus
+    created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
 
