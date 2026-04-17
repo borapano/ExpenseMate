@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
+import { useAuth } from '../AuthContext';
 import ExpenseForm from '../components/ExpenseForm';
 import ExpenseList from '../components/ExpenseList';
 
@@ -16,8 +17,7 @@ const GroupDetails = () => {
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);
 
-    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const token = localStorage.getItem('token');
+    const { user: currentUser } = useAuth();
 
     const fetchGroupDetails = async () => {
         if (!id) return;
@@ -162,7 +162,6 @@ const GroupDetails = () => {
                 <ExpenseForm
                     group={group}
                     expenseToEdit={editingExpense}
-                    token={token}
                     onClose={() => setShowExpenseModal(false)}
                     onSuccess={() => { setShowExpenseModal(false); fetchGroupDetails(); }}
                 />

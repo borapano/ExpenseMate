@@ -194,7 +194,7 @@ def update_expense(db: Session, expense_id: UUID, expense_data: schemas.ExpenseC
 def get_group_expenses(db: Session, group_id: UUID, skip: int = 0, limit: int = 50):
     expenses = db.query(models.Expense).filter(
         models.Expense.group_id == group_id
-    ).order_by(models.Expense.expense_date.desc()).offset(skip).limit(limit).all()
+    ).order_by(models.Expense.created_date.desc(), models.Expense.expense_date.desc()).offset(skip).limit(limit).all()
 
     result = []
 
@@ -226,7 +226,7 @@ def get_group_expenses(db: Session, group_id: UUID, skip: int = 0, limit: int = 
             "description": expense.description,
             "category": expense.category,
             "expense_date": expense.expense_date,
-            "created_date": expense.expense_date,
+            "created_date": expense.created_date,  # ✅ Fixed: was incorrectly set to expense_date
             "participants": participants_data
         })
 

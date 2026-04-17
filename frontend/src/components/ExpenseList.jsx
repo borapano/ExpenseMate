@@ -17,9 +17,9 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
         }
     };
 
-    // 1. Renditja: Sigurohemi që më i riu të jetë lart (nëse nuk vjen i renditur nga API)
+    // 1. Renditja: Primare nga created_date (data e futjes), me fallback tek expense_date
     const sortedExpenses = [...expenses].sort((a, b) =>
-        new Date(b.expense_date || b.created_date) - new Date(a.expense_date || a.created_date)
+        new Date(b.created_date || b.expense_date) - new Date(a.created_date || a.expense_date)
     );
 
     if (!sortedExpenses || sortedExpenses.length === 0) {
