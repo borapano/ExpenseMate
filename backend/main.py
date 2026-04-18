@@ -104,6 +104,10 @@ def get_my_balance(db: Session = Depends(get_db), current_user: models.User = De
     net_bal = crud.get_user_net_balance(db, current_user.id)
     return {"net_balance": float(net_bal)}
 
+@app.get("/users/me/spending-history")
+def get_spending_history(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return crud.get_last_10_days_spending(db, current_user.id)
+
 @app.post("/groups/", response_model=schemas.GroupOut)
 def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     new_group = crud.create_group(db, group, current_user.id)
@@ -115,6 +119,7 @@ def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends
     result = []
     for g in groups:
         total = db.query(func.sum(models.Expense.amount)).filter(models.Expense.group_id == g.id).scalar() or 0
+        net_bal = crud.get_group_net_balance(db, current_user.id, g.id)
         result.append({
             "id": str(g.id),
             "name": g.name,
@@ -130,7 +135,8 @@ def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends
                 } for m in g.members
             ],
             "expenses": [],
-            "total_expenses": float(total)
+            "total_expenses": float(total),
+            "net_balance": float(net_bal)
         })
     return result
 

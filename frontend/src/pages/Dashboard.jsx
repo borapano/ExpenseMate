@@ -43,10 +43,10 @@ const Dashboard = () => {
         try {
             setLoading(true);
 
-            // Fetch grupet dhe të dhënat e reja të Settlements njëkohësisht
-            const [groupsRes, stlRes] = await Promise.all([
+            const [groupsRes, stlRes, historyRes] = await Promise.all([
                 api.get('/groups/me'),
-                api.get('/users/me/settlement_dashboard')
+                api.get('/users/me/settlement_dashboard'),
+                api.get('/users/me/spending-history')
             ]);
 
             const groupsData = groupsRes.data || [];
@@ -61,7 +61,7 @@ const Dashboard = () => {
             let youOwe = 0;
 
             groupsData.forEach(group => {
-                const balance = Number(group.user_balance || 0);
+                const balance = Number(group.net_balance || 0);
                 net += balance;
                 if (balance > 0) {
                     owedToYou += balance;
@@ -74,8 +74,8 @@ const Dashboard = () => {
                 net_balance: net,
                 total_owed_to_you: owedToYou,
                 total_you_owe: youOwe,
-                monthly_spend: 0,
-                monthly_data: [35, 55, 40, 75, 60, 90, 100, 65, 80, 70]
+                monthly_spend: historyRes.data.monthly_spend || 0,
+                monthly_data: historyRes.data.monthly_data || []
             });
 
             setTimeout(() => setLoading(false), 500);

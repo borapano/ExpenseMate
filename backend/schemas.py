@@ -100,6 +100,7 @@ class GroupOut(GroupBase):
     members: List[GroupMemberOut] = Field(default_factory=list)
     expenses: List[ExpenseOut] = Field(default_factory=list) 
     total_expenses: Decimal = Decimal("0.00")
+    net_balance: Decimal = Decimal("0.00")
     
     model_config = ConfigDict(from_attributes=True)
 

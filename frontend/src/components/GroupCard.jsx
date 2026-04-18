@@ -5,20 +5,20 @@ import { useAuth } from '../AuthContext';
 
 const GroupCard = ({ group }) => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user: currentUser } = useAuth();
 
-    // Lidhja me backend: marrim balancën specifike të përdoruesit për këtë grup
-    // Nëse backend-i e kthen si 'user_balance' ose 'user_net_balance'
-    const balance = Number(group?.user_balance) || 0;
+    // Përdorim balancën e llogaritur nga backend-i
+    const balance = Number(group.net_balance || 0);
 
-    const isOwed = balance > 0;
-    const isSettled = balance === 0;
-    const isOwing = balance < 0;
+    // Përcaktimi i statusit (isOwed = më kanë borxh, isOwing = i kam borxh)
+    const isOwed = balance > 0.01;
+    const isOwing = balance < -0.01;
+    const isSettled = !isOwed && !isOwing;
 
     const members = group?.members || [];
-    const isAdmin = group?.creator_id === user?.id;
+    const isAdmin = String(group?.creator_id) === String(currentUser?.id);
 
-    // Formatimi i vlerës (Pika për mijëshet, presja për qindarkat)
+    // Formatimi i vlerës në stilin Europian (1.234,56 €)
     const formattedBalance = Math.abs(balance).toLocaleString('de-DE', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
@@ -37,7 +37,7 @@ const GroupCard = ({ group }) => {
                         ID: #{group?.code || '0000'}
                     </span>
 
-                    {/* Badge i Rolit - Admin Style */}
+                    {/* Badge i Adminit me ngjyrën Amber (e verdhë/portokalli) */}
                     <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full border transition-all ${isAdmin
                             ? 'bg-amber-50 border-amber-200/60 shadow-sm'
                             : 'bg-secondary/5 border-transparent'
@@ -64,16 +64,14 @@ const GroupCard = ({ group }) => {
                     {group?.name}
                 </h3>
 
-                {/* Avatarët e anëtarëve */}
+                {/* Shfaqja e anëtarëve (Avatarët) */}
                 <div className="flex -space-x-1.5">
                     {members.length > 0 ? (
                         members.slice(0, 4).map((m, idx) => (
-                            <div key={m.id || idx} className="w-8 h-8 rounded-full border-2 border-white bg-surface flex items-center justify-center text-[9px] font-bold shadow-sm overflow-hidden">
-                                {(m.avatar_url || m.avatar) ? (
-                                    <img src={m.avatar_url || m.avatar} alt={m.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-secondary/60">{m.name?.charAt(0).toUpperCase() || <User size={12} />}</span>
-                                )}
+                            <div key={m.user_id || idx} className="w-8 h-8 rounded-full border-2 border-white bg-surface flex items-center justify-center text-[9px] font-bold shadow-sm overflow-hidden">
+                                <span className="text-secondary/60">
+                                    {m.user_name?.charAt(0).toUpperCase()}
+                                </span>
                             </div>
                         ))
                     ) : (
@@ -89,7 +87,7 @@ const GroupCard = ({ group }) => {
                 </div>
             </div>
 
-            {/* SEKTORI I BALANCËS - LIDHUR ME BACKEND */}
+            {/* SEKTORI I BALANCËS DHE STATUSIT */}
             <div className="pt-3 border-t border-secondary/5 flex items-center justify-between mt-auto">
                 <div className="flex flex-col">
                     <span className="text-[8px] font-black uppercase text-secondary/40 tracking-wider">Your Balance</span>
@@ -98,6 +96,7 @@ const GroupCard = ({ group }) => {
                     </span>
                 </div>
 
+                {/* Ikona e lëvizjes së parave */}
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm transition-colors ${isOwed ? 'bg-emerald-50 text-emerald-600' :
                         isSettled ? 'bg-secondary/5 text-secondary/30' :
                             'bg-red-50 text-red-600'

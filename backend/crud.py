@@ -69,6 +69,50 @@ def get_user_net_balance(db: Session, user_id: UUID) -> float:
 
     return float(owed_to_me) - float(i_owe)
 
+def get_group_net_balance(db: Session, user_id: UUID, group_id: UUID) -> float:
+    # Owed to me in this specific group
+    owed_to_me = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+        .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
+        .filter(models.Expense.group_id == group_id)\
+        .filter(models.Expense.payer_id == user_id)\
+        .filter(models.ExpenseParticipant.user_id != user_id)\
+        .filter(models.ExpenseParticipant.is_settled == False)\
+        .scalar() or 0.0
+
+    # I owe in this specific group
+    i_owe = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+        .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
+        .filter(models.Expense.group_id == group_id)\
+        .filter(models.Expense.payer_id != user_id)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.ExpenseParticipant.is_settled == False)\
+        .scalar() or 0.0
+
+    return float(owed_to_me) - float(i_owe)
+
+def get_last_10_days_spending(db: Session, user_id: UUID):
+    ten_days_ago = datetime.now().date() - timedelta(days=9)
+    # Sum share_amount grouped by expense_date
+    results = db.query(
+        models.Expense.expense_date,
+        func.sum(models.ExpenseParticipant.share_amount).label("total")
+    ).join(models.ExpenseParticipant, models.Expense.id == models.ExpenseParticipant.expense_id)\
+     .filter(models.ExpenseParticipant.user_id == user_id)\
+     .filter(models.Expense.expense_date >= ten_days_ago)\
+     .group_by(models.Expense.expense_date)\
+     .order_by(models.Expense.expense_date.asc()).all()
+    
+    # Fill in all 10 days
+    spending_dict = {row.expense_date: float(row.total) for row in results}
+    
+    last_10_days = [(datetime.now().date() - timedelta(days=i)) for i in range(9, -1, -1)]
+    monthly_data = [spending_dict.get(d, 0.0) for d in last_10_days]
+    
+    return {
+        "monthly_data": monthly_data,
+        "monthly_spend": sum(monthly_data)
+    }
+
 # ---------------- GROUP CRUD ----------------
 
 def get_group(db: Session, group_id: UUID):
