@@ -1,7 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const SettleUpModal = ({ isOpen, onClose, onConfirm, receiverName, amount }) => {
+    const [isProcessing, setIsProcessing] = useState(false);
+
     if (!isOpen) return null;
+
+    const handleConfirm = async () => {
+        setIsProcessing(true);
+        try {
+            await onConfirm();
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -15,15 +26,25 @@ const SettleUpModal = ({ isOpen, onClose, onConfirm, receiverName, amount }) => 
                 <div className="flex justify-end space-x-3">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded"
+                        disabled={isProcessing}
+                        className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Anulo
                     </button>
                     <button
-                        onClick={onConfirm}
-                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                        onClick={handleConfirm}
+                        disabled={isProcessing}
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                        Konfirmo
+                        {isProcessing ? (
+                            <>
+                                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                                </svg>
+                                Duke dërguar...
+                            </>
+                        ) : 'Konfirmo'}
                     </button>
                 </div>
             </div>
