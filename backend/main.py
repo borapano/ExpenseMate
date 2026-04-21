@@ -28,7 +28,7 @@ try:
 except Exception as e:
     logger.error(f"❌ Gabim Database: {e}")
 
-app = FastAPI(title="ExpenseMate API", version="1.9.0")
+app = FastAPI(title="ExpenseMate API", version="1.9.1")
 
 # --- CORS ---
 app.add_middleware(
@@ -96,7 +96,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "token_type": "bearer"
     }
 
-@app.post("/users/", response_model=schemas.UserOut)
+@app.post("/users/")
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return crud.create_user(db, user)
 
@@ -119,7 +119,7 @@ def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db), curr
     new_group = crud.create_group(db, group, current_user.id)
     return read_group(new_group.id, db, current_user)
 
-@app.get("/groups/me", response_model=List[schemas.GroupOut])
+@app.get("/groups/me")
 def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     groups = crud.get_user_groups(db, current_user.id)
     result = []
@@ -160,17 +160,21 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
     sorted_expenses = db.query(models.Expense).filter_by(group_id=group_id).order_by(models.Expense.created_date.desc()).all()
 
     my_debts = []
+    now_utc = datetime.now(timezone.utc)
+    seven_days_ago = now_utc - timedelta(days=7)
+
     for m in group.members:
         if m.user_id != current_user.id:
+            # Llogaritja e borxhit neto
             i_owe = db.query(func.sum(models.ExpenseParticipant.share_amount))\
                 .join(models.Expense).filter(models.Expense.group_id == group_id, models.Expense.payer_id == m.user_id, models.ExpenseParticipant.user_id == current_user.id, models.ExpenseParticipant.is_settled == False).scalar() or 0
             owed_to_me = db.query(func.sum(models.ExpenseParticipant.share_amount))\
                 .join(models.Expense).filter(models.Expense.group_id == group_id, models.Expense.payer_id == current_user.id, models.ExpenseParticipant.user_id == m.user_id, models.ExpenseParticipant.is_settled == False).scalar() or 0
             
             net_bal = float(i_owe) - float(owed_to_me)
+            
             if net_bal > 0:
                 # KONTROLLI PËR STATUSIN PENDING
-                seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
                 is_pending = db.query(models.Settlement).filter(
                     models.Settlement.group_id == group_id,
                     models.Settlement.sender_id == current_user.id,
@@ -183,11 +187,10 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
                     "user_id": str(m.user_id),
                     "user_name": m.user.name,
                     "amount": round(net_bal, 2),
-                    "is_pending": is_pending
+                    "is_pending": is_pending  # Ky është çelësi për React
                 })
 
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    pending_settlements = db.query(models.Settlement).filter(
+    pending_requests = db.query(models.Settlement).filter(
         models.Settlement.group_id == group_id,
         models.Settlement.receiver_id == current_user.id,
         models.Settlement.status == "PENDING",
@@ -205,17 +208,17 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
         "expenses": [format_expense(e) for e in sorted_expenses],
         "total_expenses": float(total),
         "my_debts": my_debts,
-        "pending_settlements": [{"id": str(s.id), "sender_name": s.sender.name, "amount": float(s.amount)} for s in pending_settlements]
+        "pending_settlements": [{"id": str(s.id), "sender_name": s.sender.name, "amount": float(s.amount)} for s in pending_requests]
     }
 
-@app.post("/groups/join", response_model=schemas.GroupOut)
+@app.post("/groups/join")
 def join_group(data: schemas.GroupJoin, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     group = crud.join_group_by_code(db, data.invite_code, current_user.id)
     if not group: raise HTTPException(404, "INVALID_CODE")
     return read_group(group.id, db, current_user)
 
 # --- EXPENSES ---
-@app.post("/expenses/", response_model=dict)
+@app.post("/expenses/")
 def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     is_member = db.query(models.GroupMember).filter_by(user_id=current_user.id, group_id=expense.group_id).first()
     if not is_member: raise HTTPException(status_code=403, detail="NOT_A_GROUP_MEMBER")
@@ -223,25 +226,27 @@ def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db)
     db.refresh(db_expense)
     return format_expense(db_expense)
 
-@app.put("/expenses/{expense_id}", response_model=dict)
+@app.put("/expenses/{expense_id}")
 def update_expense(expense_id: UUID, expense: schemas.ExpenseCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_expense = crud.update_expense(db, expense_id, expense, current_user.id)
-    if not db_expense: raise HTTPException(404, "UPDATE_NOT_ALLOWED_OR_NOT_FOUND")
+    if not db_expense: raise HTTPException(404, "UPDATE_NOT_ALLOWED")
     db.refresh(db_expense)
     return format_expense(db_expense)
 
 @app.delete("/expenses/{expense_id}")
 def delete_expense(expense_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     success = crud.delete_expense(db, expense_id, current_user.id)
-    if not success: raise HTTPException(404, "DELETE_NOT_ALLOWED_OR_NOT_FOUND")
+    if not success: raise HTTPException(404, "DELETE_NOT_ALLOWED")
     return {"detail": "DELETED"}
 
 # --- SETTLEMENTS ---
-@app.post("/settlements/", response_model=dict)
+@app.post("/settlements/")
 def create_settlement(settlement: schemas.SettlementCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # Bllokimi i kërkesave duplikatë në pritje
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    existing_pending = db.query(models.Settlement).filter(
+    now_utc = datetime.now(timezone.utc)
+    seven_days_ago = now_utc - timedelta(days=7)
+    
+    # LOCKING: Parandalon double-click në nivel baze të dhënash
+    existing = db.query(models.Settlement).filter(
         models.Settlement.group_id == settlement.group_id,
         models.Settlement.sender_id == current_user.id,
         models.Settlement.receiver_id == settlement.receiver_id,
@@ -249,7 +254,7 @@ def create_settlement(settlement: schemas.SettlementCreate, db: Session = Depend
         models.Settlement.created_at >= seven_days_ago
     ).first()
     
-    if existing_pending:
+    if existing:
         raise HTTPException(status_code=400, detail="ALREADY_PENDING")
 
     db_settlement = crud.create_settlement(db, settlement, current_user.id)
@@ -260,15 +265,13 @@ def create_settlement(settlement: schemas.SettlementCreate, db: Session = Depend
         "receiver_id": str(db_settlement.receiver_id)
     }
 
-@app.get("/groups/{group_id}/settlements", response_model=List[dict])
+@app.get("/groups/{group_id}/settlements")
 def get_group_settlements(group_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     settlements = crud.get_group_settlements(db, group_id)
     return [
         {
             "id": str(s.id),
-            "sender_id": str(s.sender_id),
             "sender_name": s.sender.name,
-            "receiver_id": str(s.receiver_id),
             "receiver_name": s.receiver.name,
             "amount": float(s.amount),
             "status": s.status,
@@ -280,7 +283,7 @@ def get_group_settlements(group_id: UUID, db: Session = Depends(get_db), current
 def confirm_settlement(settlement_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     success = crud.confirm_settlement(db, settlement_id, current_user.id)
     if not success:
-        raise HTTPException(status_code=400, detail="CONFIRMATION_FAILED_OR_UNAUTHORIZED")
+        raise HTTPException(status_code=400, detail="CONFIRMATION_FAILED")
     return {"detail": "CONFIRMED"}
 
 @app.patch("/settlements/{settlement_id}/reject")
@@ -295,6 +298,8 @@ def reject_settlement(settlement_id: UUID, db: Session = Depends(get_db), curren
 def get_global_settlements(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     my_groups = crud.get_user_groups(db, current_user.id)
     global_debts = []
+    now_utc = datetime.now(timezone.utc)
+    seven_days_ago = now_utc - timedelta(days=7)
     
     for g in my_groups:
         for m in g.members:
@@ -306,8 +311,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
                 
                 net_bal = float(i_owe) - float(owed_to_me)
                 if net_bal > 0:
-                    # Kontrolli i statusit pending kudo në dashboard
-                    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
                     is_pending = db.query(models.Settlement).filter(
                         models.Settlement.group_id == g.id,
                         models.Settlement.sender_id == current_user.id,
@@ -325,7 +328,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
                         "is_pending": is_pending
                     })
 
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     pending_requests = db.query(models.Settlement).filter(
         models.Settlement.receiver_id == current_user.id,
         models.Settlement.status == "PENDING",

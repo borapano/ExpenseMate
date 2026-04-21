@@ -1,7 +1,7 @@
 import os
 import logging
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
@@ -51,7 +51,6 @@ def create_user(db: Session, user: schemas.UserCreate):
         raise ValueError("DATABASE_INTEGRITY_ERROR")
 
 def get_user_net_balance(db: Session, user_id: UUID) -> float:
-    # Owed to me (Lekë që do marr)
     owed_to_me = db.query(func.sum(models.ExpenseParticipant.share_amount))\
         .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
         .filter(models.Expense.payer_id == user_id)\
@@ -59,7 +58,6 @@ def get_user_net_balance(db: Session, user_id: UUID) -> float:
         .filter(models.ExpenseParticipant.is_settled == False)\
         .scalar() or 0.0
 
-    # I owe (Lekë që do jap)
     i_owe = db.query(func.sum(models.ExpenseParticipant.share_amount))\
         .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
         .filter(models.Expense.payer_id != user_id)\
@@ -70,7 +68,6 @@ def get_user_net_balance(db: Session, user_id: UUID) -> float:
     return float(owed_to_me) - float(i_owe)
 
 def get_group_net_balance(db: Session, user_id: UUID, group_id: UUID) -> float:
-    # Owed to me in this specific group
     owed_to_me = db.query(func.sum(models.ExpenseParticipant.share_amount))\
         .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
         .filter(models.Expense.group_id == group_id)\
@@ -79,7 +76,6 @@ def get_group_net_balance(db: Session, user_id: UUID, group_id: UUID) -> float:
         .filter(models.ExpenseParticipant.is_settled == False)\
         .scalar() or 0.0
 
-    # I owe in this specific group
     i_owe = db.query(func.sum(models.ExpenseParticipant.share_amount))\
         .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
         .filter(models.Expense.group_id == group_id)\
@@ -91,8 +87,7 @@ def get_group_net_balance(db: Session, user_id: UUID, group_id: UUID) -> float:
     return float(owed_to_me) - float(i_owe)
 
 def get_last_10_days_spending(db: Session, user_id: UUID):
-    ten_days_ago = datetime.now().date() - timedelta(days=9)
-    # Sum share_amount grouped by expense_date
+    ten_days_ago = datetime.now(timezone.utc).date() - timedelta(days=9)
     results = db.query(
         models.Expense.expense_date,
         func.sum(models.ExpenseParticipant.share_amount).label("total")
@@ -102,10 +97,8 @@ def get_last_10_days_spending(db: Session, user_id: UUID):
      .group_by(models.Expense.expense_date)\
      .order_by(models.Expense.expense_date.asc()).all()
     
-    # Fill in all 10 days
     spending_dict = {row.expense_date: float(row.total) for row in results}
-    
-    last_10_days = [(datetime.now().date() - timedelta(days=i)) for i in range(9, -1, -1)]
+    last_10_days = [(datetime.now(timezone.utc).date() - timedelta(days=i)) for i in range(9, -1, -1)]
     monthly_data = [spending_dict.get(d, 0.0) for d in last_10_days]
     
     return {
@@ -170,7 +163,7 @@ def get_user_groups(db: Session, user_id: UUID):
 def create_expense(db: Session, expense: schemas.ExpenseCreate, payer_id: UUID):
     total_shares = sum(p.share_amount for p in expense.participants)
     if abs(float(total_shares) - float(expense.amount)) > 0.01:
-        raise HTTPException(status_code=400, detail="Shuma e pjesëve nuk përputhet me totalin")
+        raise HTTPException(status_code=400, detail="SHARE_TOTAL_MISMATCH")
 
     db_expense = models.Expense(
         id=uuid4(),
@@ -206,7 +199,7 @@ def update_expense(db: Session, expense_id: UUID, expense_data: schemas.ExpenseC
 
     total_shares = sum(p.share_amount for p in expense_data.participants)
     if abs(float(total_shares) - float(expense_data.amount)) > 0.01:
-        raise HTTPException(status_code=400, detail="Shuma e pjesëve nuk përputhet me totalin")
+        raise HTTPException(status_code=400, detail="SHARE_TOTAL_MISMATCH")
 
     try:
         db_expense.amount = expense_data.amount
@@ -236,9 +229,22 @@ def delete_expense(db: Session, expense_id: UUID, current_user_id: UUID):
     db.commit()
     return True
 
-# ---------------- ✅ SETTLEMENT CRUD (I RI) ----------------
+# ---------------- SETTLEMENT CRUD ----------------
 
 def create_settlement(db: Session, settlement: schemas.SettlementCreate, sender_id: UUID):
+    # Kontrolli i fundit për siguri brenda transaksionit
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    existing = db.query(models.Settlement).filter(
+        models.Settlement.group_id == settlement.group_id,
+        models.Settlement.sender_id == sender_id,
+        models.Settlement.receiver_id == settlement.receiver_id,
+        models.Settlement.status == "PENDING",
+        models.Settlement.created_at >= seven_days_ago
+    ).first()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="ALREADY_PENDING")
+
     db_settlement = models.Settlement(
         id=uuid4(),
         group_id=settlement.group_id,
@@ -253,15 +259,9 @@ def create_settlement(db: Session, settlement: schemas.SettlementCreate, sender_
     return db_settlement
 
 def get_group_settlements(db: Session, group_id: UUID):
-    # Filtrojmë që të mos shohim kërkesa më të vjetra se 7 ditë nëse janë PENDING
-    seven_days_ago = datetime.now() - timedelta(days=7)
-    
+    # Shfaqim të gjitha settlementet, por i rendisim sipas kohës
     return db.query(models.Settlement).filter(
-        models.Settlement.group_id == group_id,
-        or_(
-            models.Settlement.status != "PENDING",
-            models.Settlement.created_at >= seven_days_ago
-        )
+        models.Settlement.group_id == group_id
     ).order_by(models.Settlement.created_at.desc()).all()
 
 def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
@@ -278,9 +278,7 @@ def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
         # 1. Kalojmë statusin në CONFIRMED
         settlement.status = "CONFIRMED"
 
-        # 2. Logjika e mbylljes së borxheve: 
-        # Gjejmë pjesëmarrjet ku Sender (paguesi i settlement) i ka borxh Receiver-it
-        # (dmth Receiver ka paguar faturën origjinale dhe Sender është pjesëmarrës)
+        # 2. Mbyllim borxhet në mënyrë ciklike (FIFO)
         borxhet = db.query(models.ExpenseParticipant)\
             .join(models.Expense)\
             .filter(
@@ -290,17 +288,16 @@ def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
                 models.ExpenseParticipant.is_settled == False
             ).order_by(models.Expense.created_date.asc()).all()
 
-        rem_amount = settlement.amount
+        rem_amount = float(settlement.amount)
         for b in borxhet:
             if rem_amount <= 0: break
             
-            if b.share_amount <= rem_amount:
-                rem_amount -= b.share_amount
+            share = float(b.share_amount)
+            if share <= rem_amount:
+                rem_amount -= share
                 b.is_settled = True
             else:
-                # Nëse paguan pjesërisht një shpenzim të madh, krijojmë një balancë të re 
-                # (Kjo pjesë mund të lihet e thjeshtë duke e mbyllur vetëm nqs shuma mbulon plotësisht)
-                b.share_amount -= rem_amount
+                b.share_amount = share - rem_amount
                 rem_amount = 0
 
         db.commit()
@@ -313,7 +310,8 @@ def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
 def reject_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
     settlement = db.query(models.Settlement).filter(
         models.Settlement.id == settlement_id,
-        models.Settlement.receiver_id == receiver_id
+        models.Settlement.receiver_id == receiver_id,
+        models.Settlement.status == "PENDING"
     ).first()
     
     if not settlement:
