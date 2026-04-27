@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 import {
@@ -22,6 +23,7 @@ const NavItem = ({ icon, label, active = false }) => (
 
 const Dashboard = () => {
     const { user, logout } = useAuth();
+    const navigate = useNavigate();
     const [groups, setGroups] = useState([]);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isJoinOpen, setIsJoinOpen] = useState(false);
@@ -144,7 +146,7 @@ const Dashboard = () => {
                 </div>
                 <nav className="flex-1 px-4 space-y-1 mt-4">
                     <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" active />
-                    <NavItem icon={<Activity size={19} />} label="Activity Feed" />
+                    <NavItem icon={<Activity size={19} />} label="Activity Feed" onClick={() => navigate('/activity-feed')} />
                     <NavItem icon={<CreditCard size={19} />} label="Expenses" />
                     <NavItem icon={<Users size={19} />} label="Groups" />
                     <NavItem icon={<Settings size={19} />} label="Settings" />

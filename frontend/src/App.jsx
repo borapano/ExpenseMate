@@ -7,6 +7,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GroupDetails = lazy(() => import('./pages/GroupDetails'));
+const ActivityFeed = lazy(() => import('./pages/ActivityFeed'));
 
 const Spinner = () => (
   <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
@@ -49,6 +50,12 @@ function App() {
         <Route path="/groups/:id" element={
           <ProtectedRoute>
             <GroupDetails />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/activity-feed" element={
+          <ProtectedRoute>
+            <ActivityFeed />
           </ProtectedRoute>
         } />
 
