@@ -16,6 +16,7 @@ class User(Base):
     role = Column(String, default="user")
     phone_number = Column(String, nullable=True)
     avatar = Column(String, nullable=True)
+    monthly_budget = Column(Numeric(10, 2), default=1000.00)
 
     # RELATIONSHIPS
     created_groups = relationship("Group", back_populates="creator")

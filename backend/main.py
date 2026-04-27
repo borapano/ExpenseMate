@@ -157,6 +157,23 @@ def get_spending_history(db: Session = Depends(get_db), current_user: models.Use
     return crud.get_last_10_days_spending(db, current_user.id)
 
 
+@app.put("/users/me/budget")
+def update_my_budget(budget_data: dict, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    budget = float(budget_data.get("monthly_budget", 1000.00))
+    user = crud.update_user_budget(db, current_user.id, budget)
+    return {"monthly_budget": float(user.monthly_budget)}
+
+
+@app.get("/users/me/analytics/stats")
+def get_analytics_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return crud.get_analytics_stats(db, current_user.id)
+
+
+@app.get("/users/me/analytics/charts")
+def get_analytics_charts(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return crud.get_analytics_charts(db, current_user.id)
+
+
 @app.get("/users/me/expenses")
 def get_my_expenses(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     # Get all groups the user belongs to

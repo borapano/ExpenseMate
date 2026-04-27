@@ -12,7 +12,7 @@ const ActivityFeed = lazy(() => import('./pages/ActivityFeed'));
 const Spinner = () => (
   <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600" />
-    <p className="text-slate-500 font-medium">Duke u ngarkuar...</p>
+    <p className="text-slate-500 font-medium">Loading...</p>
   </div>
 );
 

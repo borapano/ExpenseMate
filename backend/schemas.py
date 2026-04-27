@@ -16,12 +16,25 @@ class SettlementStatus(str, enum.Enum):
     confirmed = "CONFIRMED"
     rejected = "REJECTED"
 
+class ExpenseCategory(str, enum.Enum):
+    food_dining = "Food & Dining"
+    groceries = "Groceries"
+    transportation = "Transportation"
+    housing = "Housing"
+    utilities = "Utilities"
+    entertainment = "Entertainment"
+    shopping = "Shopping"
+    travel = "Travel"
+    health = "Health"
+    bills_subscriptions = "Bills & Subscriptions"
+
 # --- USER SCHEMAS ---
 class UserBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
     phone_number: Optional[str] = Field(None, max_length=20)
     avatar: Optional[str] = None
+    monthly_budget: Decimal = Field(default=Decimal("1000.00"), ge=0, decimal_places=2)
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8)
@@ -51,7 +64,7 @@ class ExpenseParticipantOut(ExpenseParticipantBase):
 class ExpenseBase(BaseModel):
     amount: Decimal = Field(..., gt=0, decimal_places=2)
     description: str = Field(..., min_length=3, max_length=255)
-    category: str = Field("General", max_length=50)
+    category: ExpenseCategory
     expense_date: date
     receipt_image: Optional[str] = None 
 

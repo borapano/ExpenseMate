@@ -7,6 +7,7 @@ import {
   Tooltip,
   Sector,
 } from 'recharts';
+import { getCategoryDetails } from '../../utils/categoryMap';
 
 const renderActiveShape = (props) => {
   const {
@@ -54,9 +55,13 @@ const CategoryPieChart = ({ data }) => {
           activeShape={renderActiveShape}
           onMouseEnter={(_, index) => setActiveIndex(index)}
         >
-          {safeData.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={entry.color || '#547792'} stroke="none" />
-          ))}
+          {safeData.map((entry, index) => {
+            const details = getCategoryDetails(entry.name);
+            const fill = details && details.hexColor ? details.hexColor : (entry.color || '#547792');
+            return (
+              <Cell key={`cell-${index}`} fill={fill} stroke="none" />
+            );
+          })}
         </Pie>
       </PieChart>
     </ResponsiveContainer>

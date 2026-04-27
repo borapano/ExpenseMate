@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Tag, Calendar, Users, Info } from 'lucide-react';
 import api from '../api';
+import { CATEGORIES } from '../utils/categoryMap';
 
 const ExpenseForm = ({ group, expenseToEdit, onClose, onSuccess }) => {
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         description: '',
         amount: '',
-        category: 'General',
+        category: 'Food & Dining',
         expense_date: new Date().toISOString().split('T')[0],
         participants: []
     });
@@ -17,7 +18,7 @@ const ExpenseForm = ({ group, expenseToEdit, onClose, onSuccess }) => {
             setFormData({
                 description: expenseToEdit.description,
                 amount: expenseToEdit.amount.toString(),
-                category: expenseToEdit.category || 'General',
+                category: expenseToEdit.category || 'Food & Dining',
                 expense_date: expenseToEdit.expense_date,
                 participants: expenseToEdit.participants.map(p => p.user_id)
             });
@@ -171,12 +172,9 @@ const ExpenseForm = ({ group, expenseToEdit, onClose, onSuccess }) => {
                                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                 className="w-full px-4 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500"
                             >
-                                <option value="General">Kategoria</option>
-                                <option value="Ushqim">Ushqim</option>
-                                <option value="Transport">Transport</option>
-                                <option value="Qira">Qira</option>
-                                <option value="Argëtim">Argëtim</option>
-                                <option value="Fatura">Fatura</option>
+                                {CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
                             </select>
                         </div>
 

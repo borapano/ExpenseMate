@@ -48,12 +48,12 @@ export const dailyExpenseData = [
 
 /** Category distribution */
 export const categoryData = [
-  { name: "Food & Dining",  value: 420, color: "#FFC570" },
-  { name: "Transport",      value: 215, color: "#547792" },
-  { name: "Utilities",      value: 180, color: "#1A3263" },
-  { name: "Entertainment",  value: 145, color: "#EFD2B0" },
-  { name: "Healthcare",     value: 210, color: "#6B8FAF" },
-  { name: "Shopping",       value: 114.5, color: "#A8C5DA" },
+  { name: "Food & Dining",  value: 420, color: "#d97706" },
+  { name: "Transportation", value: 215, color: "#2563eb" },
+  { name: "Utilities",      value: 180, color: "#ca8a04" },
+  { name: "Entertainment",  value: 145, color: "#9333ea" },
+  { name: "Health",         value: 210, color: "#dc2626" },
+  { name: "Shopping",       value: 114.5, color: "#db2777" },
 ];
 
 /** Group spending */
@@ -66,26 +66,26 @@ export const groupSpendingData = [
 
 /** Monthly comparison */
 export const monthlyComparisonData = [
-  { category: "Food",          thisMonth: 420, lastMonth: 355 },
-  { category: "Transport",     thisMonth: 215, lastMonth: 240 },
+  { category: "Food & Dining", thisMonth: 420, lastMonth: 355 },
+  { category: "Transportation",thisMonth: 215, lastMonth: 240 },
   { category: "Utilities",     thisMonth: 180, lastMonth: 180 },
   { category: "Entertainment", thisMonth: 145, lastMonth: 95  },
-  { category: "Healthcare",    thisMonth: 210, lastMonth: 130 },
+  { category: "Health",        thisMonth: 210, lastMonth: 130 },
   { category: "Shopping",      thisMonth: 114.5, lastMonth: 200 },
 ];
 
 /** Recent transactions */
 export const recentTransactions = [
-  { id: 1,  name: "Grocery Run",          category: "Food & Dining",  date: "2026-04-27", amount: -64.30, group: "Family"    },
-  { id: 2,  name: "Uber to Airport",      category: "Transport",      date: "2026-04-26", amount: -28.50, group: "Trip 2024" },
+  { id: 1,  name: "Grocery Run",          category: "Groceries",  date: "2026-04-27", amount: -64.30, group: "Family"    },
+  { id: 2,  name: "Uber to Airport",      category: "Transportation",      date: "2026-04-26", amount: -28.50, group: "Trip 2024" },
   { id: 3,  name: "Electricity Bill",     category: "Utilities",      date: "2026-04-25", amount: -95.00, group: "Roommates" },
   { id: 4,  name: "Netflix Subscription", category: "Entertainment",  date: "2026-04-25", amount: -15.99, group: "Family"    },
   { id: 5,  name: "Refund – Overpayment", category: "Shopping",       date: "2026-04-24", amount: +40.00, group: "Roommates" },
   { id: 6,  name: "Dinner – Casa Mia",    category: "Food & Dining",  date: "2026-04-23", amount: -82.00, group: "Work Lunch"},
-  { id: 7,  name: "Pharmacy",             category: "Healthcare",     date: "2026-04-22", amount: -34.75, group: "Family"    },
-  { id: 8,  name: "Bus Monthly Pass",     category: "Transport",      date: "2026-04-21", amount: -45.00, group: "Roommates" },
+  { id: 7,  name: "Pharmacy",             category: "Health",     date: "2026-04-22", amount: -34.75, group: "Family"    },
+  { id: 8,  name: "Bus Monthly Pass",     category: "Transportation",      date: "2026-04-21", amount: -45.00, group: "Roommates" },
   { id: 9,  name: "Concert Tickets",      category: "Entertainment",  date: "2026-04-20", amount: -120.00,group: "Trip 2024" },
-  { id: 10, name: "Settlement Received",  category: "Transfer",       date: "2026-04-19", amount: +55.00, group: "Family"    },
-  { id: 11, name: "Supermarket",          category: "Food & Dining",  date: "2026-04-18", amount: -47.20, group: "Roommates" },
-  { id: 12, name: "Doctor Visit",         category: "Healthcare",     date: "2026-04-17", amount: -60.00, group: "Family"    },
+  { id: 10, name: "Settlement Received",  category: "Bills & Subscriptions",       date: "2026-04-19", amount: +55.00, group: "Family"    },
+  { id: 11, name: "Supermarket",          category: "Groceries",  date: "2026-04-18", amount: -47.20, group: "Roommates" },
+  { id: 12, name: "Doctor Visit",         category: "Health",     date: "2026-04-17", amount: -60.00, group: "Family"    },
 ];

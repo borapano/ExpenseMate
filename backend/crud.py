@@ -106,6 +106,187 @@ def get_last_10_days_spending(db: Session, user_id: UUID):
         "monthly_spend": sum(monthly_data)
     }
 
+def update_user_budget(db: Session, user_id: UUID, budget: float):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user:
+        user.monthly_budget = budget
+        db.commit()
+        db.refresh(user)
+    return user
+
+def normalize_category(cat: str) -> str:
+    if not cat: return "Other"
+    c = cat.strip().lower()
+    mapping = {
+        "ushqim": "Food & Dining",
+        "food": "Food & Dining",
+        "food & dining": "Food & Dining",
+        "qira": "Housing",
+        "housing": "Housing",
+        "transport": "Transportation",
+        "transportation": "Transportation",
+        "fatura": "Bills & Subscriptions",
+        "bills & subscriptions": "Bills & Subscriptions",
+        "utilities": "Utilities",
+        "argëtim": "Entertainment",
+        "entertainment": "Entertainment",
+        "shopping": "Shopping",
+        "healthcare": "Health",
+        "health": "Health",
+        "travel": "Travel",
+        "groceries": "Groceries",
+    }
+    return mapping.get(c, "Other")
+
+def get_analytics_stats(db: Session, user_id: UUID):
+    now = datetime.now(timezone.utc).date()
+    start_of_month = now.replace(day=1)
+    if start_of_month.month == 1:
+        start_of_last_month = start_of_month.replace(year=start_of_month.year-1, month=12)
+    else:
+        start_of_last_month = start_of_month.replace(month=start_of_month.month-1)
+    
+    current_month_total = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+        .join(models.Expense)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.Expense.expense_date >= start_of_month)\
+        .filter(models.Expense.expense_date <= now)\
+        .scalar() or 0.0
+
+    last_month_total = db.query(func.sum(models.ExpenseParticipant.share_amount))\
+        .join(models.Expense)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.Expense.expense_date >= start_of_last_month)\
+        .filter(models.Expense.expense_date < start_of_month)\
+        .scalar() or 0.0
+
+    top_cat_rows = db.query(models.Expense.category, func.sum(models.ExpenseParticipant.share_amount).label('total'))\
+        .join(models.ExpenseParticipant)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.Expense.expense_date >= start_of_month)\
+        .group_by(models.Expense.category)\
+        .all()
+        
+    cat_totals = {}
+    for row in top_cat_rows:
+        norm_cat = normalize_category(row.category)
+        cat_totals[norm_cat] = cat_totals.get(norm_cat, 0.0) + float(row.total)
+
+    top_cat_name = "None"
+    top_cat_amount = 0.0
+    if cat_totals:
+        top_cat_name = max(cat_totals, key=cat_totals.get)
+        top_cat_amount = cat_totals[top_cat_name]
+
+    return {
+        "totalSpentMonth": float(current_month_total),
+        "totalSpentLastMonth": float(last_month_total),
+        "topCategory": {
+            "name": top_cat_name,
+            "amount": top_cat_amount
+        }
+    }
+
+def get_analytics_charts(db: Session, user_id: UUID):
+    now = datetime.now(timezone.utc).date()
+    thirty_days_ago = now - timedelta(days=29)
+
+    # 1. Daily Trends
+    daily_rows = db.query(models.Expense.expense_date, func.sum(models.ExpenseParticipant.share_amount).label('total'))\
+        .join(models.ExpenseParticipant)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.Expense.expense_date >= thirty_days_ago)\
+        .group_by(models.Expense.expense_date)\
+        .order_by(models.Expense.expense_date.asc())\
+        .all()
+    
+    daily_dict = {row.expense_date: float(row.total) for row in daily_rows}
+    dailyTrends = []
+    for i in range(29, -1, -1):
+        d = now - timedelta(days=i)
+        dailyTrends.append({
+            "day": d.strftime("%b %d"),
+            "amount": daily_dict.get(d, 0.0)
+        })
+
+    # 2. Category Split (this month)
+    start_of_month = now.replace(day=1)
+    cat_rows = db.query(models.Expense.category, func.sum(models.ExpenseParticipant.share_amount).label('total'))\
+        .join(models.ExpenseParticipant)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.Expense.expense_date >= start_of_month)\
+        .group_by(models.Expense.category)\
+        .all()
+    
+    colors = ["#FFC570", "#547792", "#1A3263", "#EFD2B0", "#6B8FAF", "#A8C5DA"]
+    
+    cat_totals = {}
+    for row in cat_rows:
+        norm_cat = normalize_category(row.category)
+        cat_totals[norm_cat] = cat_totals.get(norm_cat, 0.0) + float(row.total)
+
+    categorySplit = []
+    for cat, total in cat_totals.items():
+        categorySplit.append({
+            "name": cat,
+            "value": total,
+        })
+
+    # 3. Group Spending (this month)
+    group_rows = db.query(models.Group.name, func.sum(models.ExpenseParticipant.share_amount).label('total'))\
+        .select_from(models.ExpenseParticipant)\
+        .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)\
+        .join(models.Group, models.Group.id == models.Expense.group_id)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.Expense.expense_date >= start_of_month)\
+        .group_by(models.Group.name)\
+        .all()
+
+    groupSpending = []
+    for i, row in enumerate(group_rows):
+        groupSpending.append({
+            "name": row.name,
+            "value": float(row.total),
+            "color": colors[len(colors) - 1 - (i % len(colors))]
+        })
+
+    # 4. Monthly Comparison (this month vs last month)
+    if start_of_month.month == 1:
+        start_of_last_month = start_of_month.replace(year=start_of_month.year-1, month=12)
+    else:
+        start_of_last_month = start_of_month.replace(month=start_of_month.month-1)
+
+    last_month_cat_rows = db.query(models.Expense.category, func.sum(models.ExpenseParticipant.share_amount).label('total'))\
+        .join(models.ExpenseParticipant)\
+        .filter(models.ExpenseParticipant.user_id == user_id)\
+        .filter(models.Expense.expense_date >= start_of_last_month)\
+        .filter(models.Expense.expense_date < start_of_month)\
+        .group_by(models.Expense.category)\
+        .all()
+    
+    last_month_dict = {}
+    for row in last_month_cat_rows:
+        n = normalize_category(row.category)
+        last_month_dict[n] = last_month_dict.get(n, 0.0) + float(row.total)
+        
+    this_month_dict = cat_totals # Re-use the normalized dict from above
+
+    all_cats = set(last_month_dict.keys()).union(set(this_month_dict.keys()))
+    monthlyComparison = []
+    for cat in all_cats:
+        monthlyComparison.append({
+            "category": cat,
+            "thisMonth": this_month_dict.get(cat, 0.0),
+            "lastMonth": last_month_dict.get(cat, 0.0)
+        })
+
+    return {
+        "dailyTrends": dailyTrends,
+        "categorySplit": categorySplit,
+        "groupSpending": groupSpending,
+        "monthlyComparison": monthlyComparison
+    }
+
 # ---------------- GROUP CRUD ----------------
 
 def get_group(db: Session, group_id: UUID):

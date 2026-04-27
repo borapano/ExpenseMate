@@ -4,20 +4,11 @@ import {
     Coffee, Car, Home, Wrench, HelpCircle, Edit3, Trash2
 } from 'lucide-react';
 
+import { getCategoryDetails } from '../utils/categoryMap';
+
 const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) => {
     // Debug log to track what is being received
     console.log("Activity Feed Data:", expenses);
-
-    const getCategoryIcon = (category) => {
-        switch (category) {
-            case 'Ushqim': return <Coffee className="text-orange-500" size={20} />;
-            case 'Transport': return <Car className="text-blue-500" size={20} />;
-            case 'Qira': return <Home className="text-purple-500" size={20} />;
-            case 'Argëtim': return <ShoppingBag className="text-pink-500" size={20} />;
-            case 'Fatura': return <Wrench className="text-red-500" size={20} />;
-            default: return <HelpCircle className="text-gray-500" size={20} />;
-        }
-    };
 
     if (isLoading) {
         return (
@@ -86,9 +77,14 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) =
 
                             {/* LEFT SIDE */}
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center">
-                                    {getCategoryIcon(expense?.category)}
-                                </div>
+                                {(() => {
+                                    const { icon, colorClass } = getCategoryDetails(expense?.category);
+                                    return (
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                                            {icon}
+                                        </div>
+                                    );
+                                })()}
 
                                 <div>
                                     <h4 className="font-black text-slate-800 text-sm mb-1">
