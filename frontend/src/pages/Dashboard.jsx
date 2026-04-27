@@ -161,7 +161,7 @@ const Dashboard = () => {
                     <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard"     to="/dashboard" />
                     <NavItem icon={<Activity size={19} />}        label="Activity Feed" to="/activity-feed" />
                     <NavItem icon={<CreditCard size={19} />}      label="Expenses"      to="/expenses" />
-                    <NavItem icon={<Users size={19} />}           label="Groups"        to="/dashboard" />
+                    <NavItem icon={<Users size={19} />}           label="Groups"        to="/groups" />
                     <NavItem icon={<Settings size={19} />}        label="Settings"      to="/settings" />
                 </nav>
                 <div className="p-6 border-t border-white/5 mt-auto">

@@ -197,7 +197,7 @@ const ChartCard = ({ title, children, legend }) => (
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 const ActivityFeed = () => {
   const { user, logout } = useAuth();
-  
+
   const [stats, setStats] = useState(null);
   const [charts, setCharts] = useState(null);
   const [monthlyBudget, setMonthlyBudget] = useState(1000);
