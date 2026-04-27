@@ -4,27 +4,22 @@ import SettleUpModal from './SettleUpModal';
 
 const DebtList = ({ debts, groupId, onRefresh }) => {
     const [selectedDebt, setSelectedDebt] = useState(null);
+    // Optimistic UI: track IDs we've just settled locally so the button
+    // flips to "Pending" instantly without waiting for a server round-trip.
     const [localPendingIds, setLocalPendingIds] = useState(new Set());
 
-    // Reset pending kur vjen data e re nga serveri
+    // When fresh server data arrives, clear the local optimistic state —
+    // the real is_pending flag from the backend takes over.
     useEffect(() => {
         setLocalPendingIds(new Set());
     }, [debts]);
 
-    // Helper për ID të sigurt (nëse backend ndryshon strukturë)
-    const getDebtKey = (debt) => {
-        return String(debt.id ?? debt.user_id);
-    };
+    // Always use user_id as the stable key — debt objects never carry an `id` field.
+    const getDebtKey = (debt) => String(debt.user_id);
 
-    // Normalizim i is_pending
-    const isDebtPending = (debt) => {
-        return (
-            debt.is_pending === true ||
-            debt.is_pending === "true" ||
-            debt.is_pending === 1 ||
-            localPendingIds.has(getDebtKey(debt))
-        );
-    };
+    // A debt is "pending" if the server says so OR we've just settled it optimistically.
+    const isDebtPending = (debt) =>
+        !!debt.is_pending || localPendingIds.has(getDebtKey(debt));
 
     const handleSettleClick = (debt) => {
         if (isDebtPending(debt)) return;
@@ -36,30 +31,28 @@ const DebtList = ({ debts, groupId, onRefresh }) => {
 
         const debtKey = getDebtKey(selectedDebt);
 
-        try {
-            // Blloko menjëherë në UI
-            setLocalPendingIds(prev => new Set(prev).add(debtKey));
+        // Optimistic update — flip the button to "Pending…" immediately
+        setLocalPendingIds(prev => new Set(prev).add(debtKey));
+        setSelectedDebt(null);
 
+        try {
             await api.post('/settlements/', {
                 amount: selectedDebt.amount,
-                group_id: groupId,
-                receiver_id: selectedDebt.user_id
+                // Explicit String() cast — guards against UUID objects vs string mismatch
+                group_id: String(groupId),
+                receiver_id: String(selectedDebt.user_id),
             });
 
-            setSelectedDebt(null);
-
-            // Rifresko direkt (pa delay artificial)
+            // Refresh to sync real server state
             if (onRefresh) await onRefresh();
-
         } catch (err) {
-            // Hiq nga pending në rast errori
+            // Roll back optimistic update on failure
             setLocalPendingIds(prev => {
                 const updated = new Set(prev);
                 updated.delete(debtKey);
                 return updated;
             });
-
-            console.error("Gabim gjatë settlement:", err);
+            console.error('[DebtList] Settlement failed:', err?.response?.data?.detail || err.message);
         }
     };
 
@@ -73,20 +66,23 @@ const DebtList = ({ debts, groupId, onRefresh }) => {
                 <ul className="space-y-3">
                     {debts.map((debt) => {
                         const isPending = isDebtPending(debt);
+                        const key = getDebtKey(debt);
 
                         return (
                             <li
-                                key={getDebtKey(debt)}
-                                className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${isPending
+                                key={key}
+                                className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${
+                                    isPending
                                         ? 'bg-amber-50 border-amber-200 opacity-90'
                                         : 'bg-white border-gray-100 shadow-sm'
-                                    }`}
+                                }`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${isPending
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                                        isPending
                                             ? 'bg-amber-100 text-amber-600'
                                             : 'bg-red-50 text-red-500'
-                                        }`}>
+                                    }`}>
                                         {debt.user_name?.charAt(0).toUpperCase()}
                                     </div>
 
@@ -94,9 +90,9 @@ const DebtList = ({ debts, groupId, onRefresh }) => {
                                         <p className="text-sm font-bold text-slate-800">
                                             {debt.user_name}
                                         </p>
-
-                                        <p className={`text-xs font-semibold mt-0.5 ${isPending ? 'text-amber-600' : 'text-red-500'
-                                            }`}>
+                                        <p className={`text-xs font-semibold mt-0.5 ${
+                                            isPending ? 'text-amber-600' : 'text-red-500'
+                                        }`}>
                                             {isPending
                                                 ? '⏳ Verifikimi në pritje...'
                                                 : `Borxh: ${debt.amount}€`}
@@ -106,14 +102,14 @@ const DebtList = ({ debts, groupId, onRefresh }) => {
 
                                 <div className="min-w-[100px] flex justify-end">
                                     {isPending ? (
-                                        <div className="px-3 py-2 w-28 text-center rounded-xl text-[10px] font-black uppercase tracking-tight 
+                                        <div className="px-3 py-2 w-28 text-center rounded-xl text-[10px] font-black uppercase tracking-tight
                                                        bg-amber-100 text-amber-600 border border-amber-200 cursor-not-allowed select-none">
                                             Pending...
                                         </div>
                                     ) : (
                                         <button
                                             onClick={() => handleSettleClick(debt)}
-                                            className="px-4 py-2 w-28 rounded-xl text-xs font-black bg-slate-900 text-white 
+                                            className="px-4 py-2 w-28 rounded-xl text-xs font-black bg-slate-900 text-white
                                                        hover:bg-red-600 shadow-sm transition-all active:scale-95"
                                         >
                                             PAGUAJ

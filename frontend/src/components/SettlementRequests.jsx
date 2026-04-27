@@ -2,28 +2,29 @@ import React from 'react';
 import api from '../api';
 
 const SettlementRequests = ({ settlements, onRefresh }) => {
+    // Defensive: accept undefined/null gracefully
+    const safeSettlements = Array.isArray(settlements) ? settlements : [];
 
     const handleAction = async (id, action) => {
         try {
-            // action mund te jete 'confirm' ose 'reject'
             await api.patch(`/settlements/${id}/${action}`);
-            onRefresh(); // Rifreskon te dhenat qe te zhduket kerkesa e procesuar
+            if (onRefresh) onRefresh();
         } catch (err) {
-            alert("Gabim gjate procesimit!");
+            console.error('[SettlementRequests] Action failed:', err?.response?.data || err.message);
         }
     };
 
-    if (settlements.length === 0) return null;
+    if (safeSettlements.length === 0) return null;
 
     return (
         <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 mt-4">
             <h3 className="text-sm font-bold text-blue-800 mb-3">Kërkesa për Konfirmim Pagese</h3>
             <div className="space-y-3">
-                {settlements.map((s) => (
+                {safeSettlements.map((s) => (
                     <div key={s.id} className="flex items-center justify-between border-b pb-2 last:border-0">
                         <div>
-                            <p className="text-sm font-semibold">{s.sender_name}</p>
-                            <p className="text-xs text-gray-500">Thotë se të ka paguar: <span className="font-bold">{s.amount}€</span></p>
+                            <p className="text-sm font-semibold">{s.sender_name || 'Unknown'}</p>
+                            <p className="text-xs text-gray-500">Thotë se të ka paguar: <span className="font-bold">{Number(s.amount || 0).toFixed(2)}€</span></p>
                         </div>
                         <div className="flex space-x-2">
                             <button

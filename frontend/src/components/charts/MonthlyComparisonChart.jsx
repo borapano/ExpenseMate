@@ -17,7 +17,7 @@ const CustomTooltip = ({ active, payload, label }) => {
         <p className="font-bold text-accent mb-1.5">{label}</p>
         {payload.map((p, i) => (
           <p key={i} style={{ color: p.fill }} className="font-semibold">
-            {p.name}: €{Number(p.value).toFixed(2)}
+            {p.name}: €{Number(p.value || 0).toFixed(2)}
           </p>
         ))}
       </div>
@@ -27,9 +27,19 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const MonthlyComparisonChart = ({ data }) => {
+  const safeData = Array.isArray(data) && data.length > 0 ? data : [];
+
+  if (safeData.length === 0) {
+    return (
+      <div className="h-[220px] flex items-center justify-center text-secondary/30 text-xs font-semibold">
+        No comparison data yet
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barGap={4} barCategoryGap="30%">
+      <BarChart data={safeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barGap={4} barCategoryGap="30%">
         <CartesianGrid strokeDasharray="3 3" stroke="#EFD2B0" opacity={0.4} />
         <XAxis
           dataKey="category"

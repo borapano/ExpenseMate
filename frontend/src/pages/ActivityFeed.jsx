@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, Component } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import api from '../api';
 import {
   LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut, Bell,
   TrendingDown, TrendingUp, Wallet, Tag, ShoppingCart, Zap, Bus, Film,
-  Heart, ArrowRightLeft, Utensils, ChevronDown, CalendarDays,
+  Heart, ArrowRightLeft, Utensils, ChevronDown, CalendarDays, AlertTriangle,
 } from 'lucide-react';
 
 import DailyExpenseChart     from '../components/charts/DailyExpenseChart';
@@ -18,32 +19,61 @@ import {
   categoryData,
   groupSpendingData,
   monthlyComparisonData,
-  recentTransactions,
 } from '../data/activityMockData';
 
-// ─── Sidebar Nav Item ────────────────────────────────────────────────────────
-const NavItem = ({ icon, label, active = false, onClick }) => (
-  <div
-    onClick={onClick}
-    className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200
-      ${active
-        ? 'bg-secondary/20 text-accent shadow-sm'
-        : 'text-secondary hover:bg-white/5 hover:text-white'}`}
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+// Prevents a chart crash from blanking the entire page.
+class ChartErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error, info) {
+    console.error('[ChartErrorBoundary] Chart render error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-[220px] flex flex-col items-center justify-center gap-2 text-secondary/30">
+          <AlertTriangle size={20} />
+          <span className="text-xs font-semibold">Chart unavailable</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Sidebar Nav Item ─────────────────────────────────────────────────────────
+const NavItem = ({ icon, label, to }) => (
+  <NavLink
+    to={to}
+    className={({ isActive }) =>
+      `flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200
+        ${isActive
+          ? 'bg-secondary/20 text-accent shadow-sm'
+          : 'text-secondary hover:bg-white/5 hover:text-white'}`
+    }
   >
-    <div className={active ? 'text-accent' : 'text-secondary/60'}>{icon}</div>
-    <span className="font-bold text-sm tracking-wide">{label}</span>
-    {active && <div className="ml-auto w-1.5 h-1.5 bg-accent rounded-full" />}
-  </div>
+    {({ isActive }) => (
+      <>
+        <div className={isActive ? 'text-accent' : 'text-secondary/60'}>{icon}</div>
+        <span className="font-bold text-sm tracking-wide">{label}</span>
+        {isActive && <div className="ml-auto w-1.5 h-1.5 bg-accent rounded-full" />}
+      </>
+    )}
+  </NavLink>
 );
 
-// ─── Category icon lookup ─────────────────────────────────────────────────────
+// ─── Category helpers ─────────────────────────────────────────────────────────
 const categoryIconMap = {
-  'Food & Dining':  <Utensils   size={16} />,
-  'Transport':      <Bus        size={16} />,
-  'Utilities':      <Zap        size={16} />,
-  'Entertainment':  <Film       size={16} />,
-  'Healthcare':     <Heart      size={16} />,
-  'Shopping':       <ShoppingCart size={16} />,
+  'Food & Dining':  <Utensils      size={16} />,
+  'Transport':      <Bus           size={16} />,
+  'Utilities':      <Zap           size={16} />,
+  'Entertainment':  <Film          size={16} />,
+  'Healthcare':     <Heart         size={16} />,
+  'Shopping':       <ShoppingCart  size={16} />,
   'Transfer':       <ArrowRightLeft size={16} />,
 };
 
@@ -81,7 +111,9 @@ const StatCard = ({ label, value, sub, icon, trend }) => (
 const ChartCard = ({ title, children, legend }) => (
   <div className="bg-white rounded-2xl shadow-sm border border-secondary/10 p-6 hover:shadow-md transition-shadow duration-200">
     <h3 className="text-xs font-black uppercase tracking-widest text-primary/70 mb-4">{title}</h3>
-    {children}
+    <ChartErrorBoundary>
+      {children}
+    </ChartErrorBoundary>
     {legend && (
       <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
         {legend.map((item) => (
@@ -95,7 +127,7 @@ const ChartCard = ({ title, children, legend }) => (
   </div>
 );
 
-// ─── Date Range Picker (mock) ─────────────────────────────────────────────────
+// ─── Date Range Picker ────────────────────────────────────────────────────────
 const DateRangePicker = () => {
   const ranges = ['This Week', 'This Month', 'Last Month', 'Last 3 Months', 'This Year'];
   const [selected, setSelected] = useState('This Month');
@@ -131,11 +163,26 @@ const DateRangePicker = () => {
 
 // ─── Transaction Row ──────────────────────────────────────────────────────────
 const TransactionRow = ({ tx }) => {
-  const isPositive = tx.amount > 0;
-  const icon   = categoryIconMap[tx.category] || <Tag size={16} />;
-  const colors = categoryColorMap[tx.category] || 'bg-gray-100 text-gray-600';
-  const dateObj = new Date(tx.date);
-  const formatted = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  // Safely parse amount — backend sends float, mock sends negative for expenses
+  const amount = Number(tx?.amount || 0);
+  const isPositive = amount > 0;
+  const category = tx?.category || 'General';
+  const icon   = categoryIconMap[category] || <Tag size={16} />;
+  const colors = categoryColorMap[category] || 'bg-gray-100 text-gray-600';
+
+  // Support both date shapes: mock uses `date`, backend expense uses `expense_date`
+  const rawDate = tx?.date || tx?.expense_date || '';
+  let formatted = '—';
+  try {
+    if (rawDate) {
+      formatted = new Date(rawDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    }
+  } catch (_) { /* ignore bad date strings */ }
+
+  // Support both name shapes: mock uses `name`, backend expense uses `description`
+  const name = tx?.name || tx?.description || 'No description';
+  // Support both group shapes: mock uses `group`, backend expense uses `group_name`
+  const group = tx?.group || tx?.group_name || (tx?.group_id ? `Group ${String(tx.group_id).slice(0, 6)}` : '');
 
   return (
     <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-surface/40 transition-colors duration-150 group cursor-pointer">
@@ -143,14 +190,14 @@ const TransactionRow = ({ tx }) => {
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-primary truncate group-hover:text-secondary transition-colors">{tx.name}</p>
-        <p className="text-[10px] text-secondary/60 font-semibold">{tx.category} · {formatted}</p>
+        <p className="text-sm font-bold text-primary truncate group-hover:text-secondary transition-colors">{name}</p>
+        <p className="text-[10px] text-secondary/60 font-semibold">{category} · {formatted}</p>
       </div>
       <div className="text-right flex-shrink-0">
         <p className={`text-sm font-black ${isPositive ? 'text-emerald-600' : 'text-danger'}`}>
-          {isPositive ? '+' : ''}€{Math.abs(tx.amount).toFixed(2)}
+          {isPositive ? '+' : ''}€{Math.abs(amount).toFixed(2)}
         </p>
-        <p className="text-[10px] text-secondary/50 font-semibold">{tx.group}</p>
+        <p className="text-[10px] text-secondary/50 font-semibold">{group}</p>
       </div>
     </div>
   );
@@ -159,9 +206,42 @@ const TransactionRow = ({ tx }) => {
 // ─── Activity Feed Page ───────────────────────────────────────────────────────
 const ActivityFeed = () => {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const [transactions, setTransactions] = useState([]);
+  const [txLoading, setTxLoading] = useState(true);
+  const [spendingStats, setSpendingStats] = useState({ monthly_spend: 0, monthly_data: [] });
+
+  // Fetch real transaction data from backend (all groups' expenses)
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [expensesRes, historyRes] = await Promise.all([
+          api.get('/users/me/expenses'),
+          api.get('/users/me/spending-history'),
+        ]);
+
+        console.log('[ActivityFeed] Expenses loaded:', expensesRes.data?.length, 'expenses');
+        console.log('[ActivityFeed] Spending history:', historyRes.data);
+
+        setSpendingStats(historyRes.data || { monthly_spend: 0, monthly_data: [] });
+
+        const expenses = Array.isArray(expensesRes.data) ? expensesRes.data : [];
+        if (expenses.length > 0) {
+          setTransactions(expenses);
+        } else {
+          setTransactions([]); // Set empty array if no real expenses
+        }
+      } catch (err) {
+        console.error('[ActivityFeed] Data load failed:', err?.response?.status, err.message);
+        setTransactions([]);
+      } finally {
+        setTxLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const budgetPct = Math.round((statCards.totalSpentThisMonth / statCards.totalBudget) * 100);
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
 
   return (
     <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
@@ -176,11 +256,11 @@ const ActivityFeed = () => {
         </div>
 
         <nav className="flex-1 px-4 space-y-1 mt-4">
-          <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard"     onClick={() => navigate('/dashboard')} />
-          <NavItem icon={<Activity        size={19} />} label="Activity Feed" active />
-          <NavItem icon={<CreditCard      size={19} />} label="Expenses"      />
-          <NavItem icon={<Users           size={19} />} label="Groups"        onClick={() => navigate('/dashboard')} />
-          <NavItem icon={<Settings        size={19} />} label="Settings"      />
+          <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard"     to="/dashboard" />
+          <NavItem icon={<Activity        size={19} />} label="Activity Feed" to="/activity-feed" />
+          <NavItem icon={<CreditCard      size={19} />} label="Expenses"      to="/expenses" />
+          <NavItem icon={<Users           size={19} />} label="Groups"        to="/dashboard" />
+          <NavItem icon={<Settings        size={19} />} label="Settings"      to="/settings" />
         </nav>
 
         <div className="p-6 border-t border-white/5 mt-auto">
@@ -254,12 +334,8 @@ const ActivityFeed = () => {
                 <div
                   className="h-full rounded-full transition-all duration-700"
                   style={{
-                    width: `${budgetPct}%`,
-                    background: budgetPct > 80
-                      ? '#EF4444'
-                      : budgetPct > 60
-                      ? '#FFC570'
-                      : '#1A3263',
+                    width: `${Math.min(budgetPct, 100)}%`,
+                    background: budgetPct > 80 ? '#EF4444' : budgetPct > 60 ? '#FFC570' : '#1A3263',
                   }}
                 />
               </div>
@@ -269,7 +345,7 @@ const ActivityFeed = () => {
             </div>
           </div>
 
-          {/* ── CHARTS + SIDEBAR grid ── */}
+          {/* ── CHARTS + TRANSACTIONS grid ── */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
             {/* Left/Center: 2×2 grid of charts */}
@@ -306,13 +382,13 @@ const ActivityFeed = () => {
               </div>
             </div>
 
-            {/* Right: Recent Transactions */}
+            {/* Right: Recent Transactions (real data, mock fallback) */}
             <div className="flex flex-col">
               <div className="bg-white rounded-2xl shadow-sm border border-secondary/10 p-6 flex flex-col h-full hover:shadow-md transition-shadow duration-200">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xs font-black uppercase tracking-widest text-primary/70">Recent Transactions</h3>
                   <span className="text-[10px] bg-primary/5 text-primary font-bold px-2.5 py-1 rounded-full">
-                    {recentTransactions.length} items
+                    {safeTransactions.length} items
                   </span>
                 </div>
 
@@ -321,29 +397,40 @@ const ActivityFeed = () => {
                   <div className="flex-1 bg-danger/5 rounded-xl px-3 py-2 text-center">
                     <p className="text-[10px] font-bold text-danger/70 uppercase tracking-wider">Spent</p>
                     <p className="text-sm font-black text-danger">
-                      €{recentTransactions
-                          .filter(t => t.amount < 0)
-                          .reduce((s, t) => s + Math.abs(t.amount), 0)
+                      €{safeTransactions
+                          .filter(t => Number(t?.amount || 0) < 0)
+                          .reduce((s, t) => s + Math.abs(Number(t?.amount || 0)), 0)
                           .toFixed(2)}
                     </p>
                   </div>
                   <div className="flex-1 bg-emerald-50 rounded-xl px-3 py-2 text-center">
                     <p className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-wider">Received</p>
                     <p className="text-sm font-black text-emerald-600">
-                      €{recentTransactions
-                          .filter(t => t.amount > 0)
-                          .reduce((s, t) => s + t.amount, 0)
+                      €{safeTransactions
+                          .filter(t => Number(t?.amount || 0) > 0)
+                          .reduce((s, t) => s + Number(t?.amount || 0), 0)
                           .toFixed(2)}
                     </p>
                   </div>
                 </div>
 
                 {/* List */}
-                <div className="flex-1 overflow-y-auto -mx-2 space-y-0.5 pr-1 custom-scrollbar">
-                  {recentTransactions.map((tx) => (
-                    <TransactionRow key={tx.id} tx={tx} />
-                  ))}
-                </div>
+                {txLoading ? (
+                  <div className="flex-1 flex items-center justify-center animate-pulse">
+                    <div className="text-secondary/30 text-xs font-semibold">Loading transactions...</div>
+                  </div>
+                ) : safeTransactions.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-2 text-secondary/30">
+                    <Activity size={24} />
+                    <p className="text-xs font-semibold">No activity found</p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto -mx-2 space-y-0.5 pr-1">
+                    {safeTransactions.map((tx, idx) => (
+                      <TransactionRow key={tx?.id || idx} tx={tx} />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

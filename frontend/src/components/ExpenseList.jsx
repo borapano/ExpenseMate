@@ -4,7 +4,9 @@ import {
     Coffee, Car, Home, Wrench, HelpCircle, Edit3, Trash2
 } from 'lucide-react';
 
-const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
+const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) => {
+    // Debug log to track what is being received
+    console.log("Activity Feed Data:", expenses);
 
     const getCategoryIcon = (category) => {
         switch (category) {
@@ -17,10 +19,20 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
         }
     };
 
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-16 animate-pulse bg-slate-50 rounded-[2rem]">
+                <div className="w-12 h-12 bg-slate-200 rounded-full mb-4"></div>
+                <div className="w-32 h-4 bg-slate-200 rounded mb-2"></div>
+                <div className="w-24 h-3 bg-slate-200 rounded"></div>
+            </div>
+        );
+    }
+
     // 1. Renditja: Primare nga created_date (data e futjes), me fallback tek expense_date
-    const sortedExpenses = [...expenses].sort((a, b) =>
-        new Date(b.created_date || b.expense_date) - new Date(a.created_date || a.expense_date)
-    );
+    const sortedExpenses = expenses && Array.isArray(expenses) 
+        ? [...expenses].sort((a, b) => new Date(b?.created_date || b?.expense_date) - new Date(a?.created_date || a?.expense_date))
+        : [];
 
     if (!sortedExpenses || sortedExpenses.length === 0) {
         return (
@@ -33,23 +45,24 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
 
     return (
         <div className="space-y-4">
-            {sortedExpenses.map((expense) => {
+            {sortedExpenses && sortedExpenses.map((expense) => {
+                if (!expense) return null;
 
                 // ✅ RREGULLIMI KRITIK: Krahasojmë duke i kthyer të dyja në String dhe Lowercase
                 const normalizedCurrentId = String(currentUserId || "").toLowerCase();
-                const normalizedPayerId = String(expense.payer_id || "").toLowerCase();
+                const normalizedPayerId = String(expense?.payer_id || "").toLowerCase();
 
                 const isPayer = normalizedPayerId === normalizedCurrentId;
 
-                const participants = expense.participants || [];
+                const participants = expense?.participants || [];
 
                 // ✅ RREGULLIMI PËR "SKE PJESË"
                 const myParticipation = participants.find(p =>
-                    String(p.user_id || "").toLowerCase() === normalizedCurrentId
+                    String(p?.user_id || "").toLowerCase() === normalizedCurrentId
                 );
 
-                const totalAmount = Number(expense.amount || 0);
-                const myShare = myParticipation ? Number(myParticipation.share_amount || 0) : 0;
+                const totalAmount = Number(expense?.amount || 0);
+                const myShare = myParticipation ? Number(myParticipation?.share_amount || 0) : 0;
 
                 let statusText = 'Ske pjesë';
                 let statusColor = 'text-slate-400';
@@ -66,7 +79,7 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
 
                 return (
                     <div
-                        key={expense.id}
+                        key={expense?.id || Math.random()}
                         className="bg-white border border-slate-100 rounded-[1.5rem] p-4 shadow-sm hover:shadow-md transition-all relative overflow-hidden"
                     >
                         <div className="flex items-center justify-between relative z-10">
@@ -74,26 +87,26 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
                             {/* LEFT SIDE */}
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center">
-                                    {getCategoryIcon(expense.category)}
+                                    {getCategoryIcon(expense?.category)}
                                 </div>
 
                                 <div>
                                     <h4 className="font-black text-slate-800 text-sm mb-1">
-                                        {expense.description}
+                                        {expense?.description || "Pa përshkrim"}
                                     </h4>
 
                                     <div className="flex items-center gap-3">
                                         <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
                                             <User size={12} />
-                                            {isPayer ? "Ti pagove" : (expense.payer_name || "Anëtar")}
+                                            {isPayer ? "Ti pagove" : (expense?.payer_name || "Anëtar")}
                                         </span>
 
                                         <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
                                             <Calendar size={12} />
-                                            {new Date(expense.expense_date).toLocaleDateString('sq-AL', {
+                                            {expense?.expense_date ? new Date(expense.expense_date).toLocaleDateString('sq-AL', {
                                                 day: '2-digit',
                                                 month: 'short'
-                                            })}
+                                            }) : "Data panjohur"}
                                         </span>
                                     </div>
                                 </div>
@@ -115,13 +128,13 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
                                     {isPayer && (
                                         <>
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); onEdit(expense); }}
+                                                onClick={(e) => { e.stopPropagation(); onEdit && onEdit(expense); }}
                                                 className="p-1.5 hover:bg-amber-50 rounded-lg text-amber-500 transition-colors"
                                             >
                                                 <Edit3 size={18} />
                                             </button>
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); onDelete(expense.id); }}
+                                                onClick={(e) => { e.stopPropagation(); onDelete && onDelete(expense?.id); }}
                                                 className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 transition-colors"
                                             >
                                                 <Trash2 size={18} />
@@ -131,6 +144,18 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete }) => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* LIST OF PARTICIPANTS */}
+                        {participants.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-slate-50 relative z-10 flex flex-wrap gap-2">
+                                {participants.map((p, idx) => (
+                                    <div key={idx} className="text-[10px] font-medium bg-slate-50 px-2 py-1 rounded text-slate-500 border border-slate-100 flex items-center gap-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
+                                        {p?.user_name || "Unknown"} <span className="font-bold text-slate-700">€{Number(p?.share_amount || 0).toFixed(2)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {/* SHIRITI ANASH (STATUS INDICATOR) */}
                         <div

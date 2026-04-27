@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_
 from uuid import uuid4, UUID
 from sqlalchemy.exc import IntegrityError, DataError
@@ -156,7 +156,16 @@ def join_group_by_code(db: Session, code: str, user_id: UUID):
         raise HTTPException(status_code=400, detail="JOIN_FAILED")
 
 def get_user_groups(db: Session, user_id: UUID):
-    return db.query(models.Group).join(models.GroupMember).filter(models.GroupMember.user_id == user_id).all()
+    # Eagerly load members→user in a single JOIN so callers don't trigger lazy loads
+    return (
+        db.query(models.Group)
+        .join(models.GroupMember)
+        .filter(models.GroupMember.user_id == user_id)
+        .options(
+            joinedload(models.Group.members).joinedload(models.GroupMember.user)
+        )
+        .all()
+    )
 
 # ---------------- EXPENSE CRUD ----------------
 
@@ -259,10 +268,17 @@ def create_settlement(db: Session, settlement: schemas.SettlementCreate, sender_
     return db_settlement
 
 def get_group_settlements(db: Session, group_id: UUID):
-    # Shfaqim të gjitha settlementet, por i rendisim sipas kohës
-    return db.query(models.Settlement).filter(
-        models.Settlement.group_id == group_id
-    ).order_by(models.Settlement.created_at.desc()).all()
+    # Eagerly load sender and receiver so serialization in main.py needs no extra queries
+    return (
+        db.query(models.Settlement)
+        .options(
+            joinedload(models.Settlement.sender),
+            joinedload(models.Settlement.receiver),
+        )
+        .filter(models.Settlement.group_id == group_id)
+        .order_by(models.Settlement.created_at.desc())
+        .all()
+    )
 
 def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
     settlement = db.query(models.Settlement).filter(

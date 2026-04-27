@@ -1,11 +1,14 @@
 import React from 'react';
 
 const MonthlyGraphCard = ({ data }) => {
-    const rawData = data?.monthly_data || [25, 45, 30, 70, 50, 85, 95, 60, 75, 55];
+    const rawData = Array.isArray(data?.monthly_data) && data.monthly_data.length > 0
+        ? data.monthly_data
+        : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     const chartData = rawData.slice(-10);
-    const monthlyTotal = data?.monthly_spend || 0;
+    const monthlyTotal = Number(data?.monthly_spend || 0);
 
-    const maxVal = Math.max(...chartData);
+    // Guard: Math.max(...[]) → -Infinity; use 1 as floor to avoid NaN heights
+    const maxVal = Math.max(...chartData, 1);
 
     return (
         <div className="bg-white p-9 rounded-[2.5rem] border border-secondary/5 shadow-sm hover:shadow-md transition-all duration-300 h-[280px] flex flex-col justify-between relative overflow-hidden group">

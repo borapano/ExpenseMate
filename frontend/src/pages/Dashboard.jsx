@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 import {
@@ -13,12 +13,25 @@ import GroupCard from '../components/GroupCard';
 import CreateGroupCard from '../components/CreateGroupCard';
 import { CreateGroupModal, JoinGroupModal } from '../components/GroupModals';
 
-const NavItem = ({ icon, label, active = false }) => (
-    <div className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${active ? 'bg-secondary/20 text-accent shadow-sm' : 'text-secondary hover:bg-white/5 hover:text-white'}`}>
-        <div className={active ? 'text-accent' : 'text-secondary/60'}>{icon}</div>
-        <span className="font-bold text-sm tracking-wide">{label}</span>
-        {active && <div className="ml-auto w-1.5 h-1.5 bg-accent rounded-full"></div>}
-    </div>
+const NavItem = ({ icon, label, to }) => (
+    <NavLink
+        to={to}
+        className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${
+                isActive
+                    ? 'bg-secondary/20 text-accent shadow-sm'
+                    : 'text-secondary hover:bg-white/5 hover:text-white'
+            }`
+        }
+    >
+        {({ isActive }) => (
+            <>
+                <div className={isActive ? 'text-accent' : 'text-secondary/60'}>{icon}</div>
+                <span className="font-bold text-sm tracking-wide">{label}</span>
+                {isActive && <div className="ml-auto w-1.5 h-1.5 bg-accent rounded-full" />}
+            </>
+        )}
+    </NavLink>
 );
 
 const Dashboard = () => {
@@ -145,11 +158,11 @@ const Dashboard = () => {
                     <span className="text-2xl font-bold tracking-tight">ExpenseMate</span>
                 </div>
                 <nav className="flex-1 px-4 space-y-1 mt-4">
-                    <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" active />
-                    <NavItem icon={<Activity size={19} />} label="Activity Feed" onClick={() => navigate('/activity-feed')} />
-                    <NavItem icon={<CreditCard size={19} />} label="Expenses" />
-                    <NavItem icon={<Users size={19} />} label="Groups" />
-                    <NavItem icon={<Settings size={19} />} label="Settings" />
+                    <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard"     to="/dashboard" />
+                    <NavItem icon={<Activity size={19} />}        label="Activity Feed" to="/activity-feed" />
+                    <NavItem icon={<CreditCard size={19} />}      label="Expenses"      to="/expenses" />
+                    <NavItem icon={<Users size={19} />}           label="Groups"        to="/dashboard" />
+                    <NavItem icon={<Settings size={19} />}        label="Settings"      to="/settings" />
                 </nav>
                 <div className="p-6 border-t border-white/5 mt-auto">
                     <button onClick={logout} className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full group text-sm font-bold uppercase tracking-widest">
