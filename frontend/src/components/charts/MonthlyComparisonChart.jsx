@@ -10,15 +10,24 @@ import {
   Legend,
 } from 'recharts';
 
+// ─── TOOLTIP ELEGANTE DHE FIN ──────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-primary text-white px-4 py-3 rounded-xl shadow-lg text-sm min-w-[140px]">
-        <p className="font-bold text-accent mb-1.5">{label}</p>
+      <div className="bg-white/95 border border-secondary/10 backdrop-blur-sm text-primary px-4 py-3 rounded-2xl shadow-xl min-w-[160px]">
+        <p className="font-black text-primary/80 mb-2.5 border-b border-secondary/10 pb-1.5 uppercase tracking-wider text-[11px]">
+          {label}
+        </p>
         {payload.map((p, i) => (
-          <p key={i} style={{ color: p.fill }} className="font-semibold">
-            {p.name}: €{Number(p.value || 0).toFixed(2)}
-          </p>
+          <div key={i} className="flex justify-between items-center gap-4 mb-1.5">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.fill }} />
+              <span className="text-secondary/70 font-semibold text-[12px]">{p.name}:</span>
+            </div>
+            <span className="font-bold text-[#1A3263] text-[12px]">
+              €{Number(p.value || 0).toFixed(2)}
+            </span>
+          </div>
         ))}
       </div>
     );
@@ -26,10 +35,23 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
+// ─── COMPONENTI KRYESOR ─────────────────────────────────────────────────────
 const MonthlyComparisonChart = ({ data }) => {
-  const safeData = Array.isArray(data) && data.length > 0 ? data : [];
+  // 1. Përpunimi i të dhënave: Shkurtimi i emrave dhe Renditja sipas vlerës (zbritës)
+  const processedData = React.useMemo(() => {
+    if (!Array.isArray(data)) return [];
 
-  if (safeData.length === 0) {
+    return [...data]
+      .map(item => ({
+        ...item,
+        // Shkurtojmë emrin e gjatë që të zërë më pak hapësirë
+        category: item.category === "Bills & Subscriptions" ? "Bills" : item.category
+      }))
+      // Renditim sipas shpenzimeve të këtij muaji (nga më i larti te më i ulëti)
+      .sort((a, b) => (b.thisMonth || 0) - (a.thisMonth || 0));
+  }, [data]);
+
+  if (processedData.length === 0) {
     return (
       <div className="h-[220px] flex items-center justify-center text-secondary/30 text-xs font-semibold">
         No comparison data yet
@@ -38,27 +60,69 @@ const MonthlyComparisonChart = ({ data }) => {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={safeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barGap={4} barCategoryGap="30%">
-        <CartesianGrid strokeDasharray="3 3" stroke="#EFD2B0" opacity={0.4} />
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart
+        data={processedData}
+        margin={{ top: 10, right: 10, left: -20, bottom: 10 }}
+        barGap={8}
+        barCategoryGap="20%"
+      >
+        {/* Rrjeta horizontale shumë e lehtë */}
+        <CartesianGrid
+          strokeDasharray="4 4"
+          stroke="#EFD2B0"
+          opacity={0.3}
+          vertical={false}
+        />
+
         <XAxis
           dataKey="category"
-          tick={{ fill: '#547792', fontSize: 10, fontWeight: 600 }}
+          tick={{ fill: '#547792', fontSize: 10, fontWeight: 700 }}
           tickLine={false}
           axisLine={false}
+          interval={0} // Detyron shfaqjen e çdo emri
+          dy={10}      // Zbritje e lehtë e tekstit për hapësirë
         />
+
         <YAxis
-          tick={{ fill: '#547792', fontSize: 10, fontWeight: 600 }}
+          tick={{ fill: '#547792', fontSize: 10, fontWeight: 700 }}
           tickLine={false}
           axisLine={false}
           tickFormatter={(v) => `€${v}`}
         />
-        <Tooltip content={<CustomTooltip />} />
-        <Legend
-          wrapperStyle={{ fontSize: '11px', fontWeight: 700, color: '#547792', paddingTop: '8px' }}
+
+        <Tooltip
+          content={<CustomTooltip />}
+          cursor={{ fill: '#F7F4F0', opacity: 0.5 }}
         />
-        <Bar dataKey="thisMonth" name="This Month" fill="#1A3263" radius={[6, 6, 0, 0]} />
-        <Bar dataKey="lastMonth" name="Last Month"  fill="#FFC570" radius={[6, 6, 0, 0]} />
+
+        <Legend
+          verticalAlign="top"
+          align="right"
+          iconType="circle"
+          iconSize={10}
+          wrapperStyle={{
+            fontSize: '11px',
+            fontWeight: 800,
+            color: '#1A3263',
+            paddingBottom: '25px',
+            textTransform: 'uppercase'
+          }}
+        />
+
+        {/* Shtyllat me radius të zbutur dhe ngjyrat e paletës tënde */}
+        <Bar
+          dataKey="thisMonth"
+          name="This Month"
+          fill="#1A3263"
+          radius={[5, 5, 0, 0]}
+        />
+        <Bar
+          dataKey="lastMonth"
+          name="Last Month"
+          fill="#FFC570"
+          radius={[5, 5, 0, 0]}
+        />
       </BarChart>
     </ResponsiveContainer>
   );

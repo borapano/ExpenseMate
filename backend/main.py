@@ -175,29 +175,21 @@ def get_analytics_charts(db: Session = Depends(get_db), current_user: models.Use
 
 
 @app.get("/users/me/expenses")
-def get_my_expenses(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # Get all groups the user belongs to
-    memberships = db.query(models.GroupMember).filter(models.GroupMember.user_id == current_user.id).all()
-    group_ids = [m.group_id for m in memberships]
-    
-    if not group_ids:
-        return []
-
-    # Get all expenses for these groups, ordered by created_date descending
-    expenses = (
-        db.query(models.Expense)
-        .options(
-            joinedload(models.Expense.payer),
-            joinedload(models.Expense.participants).joinedload(models.ExpenseParticipant.user),
-            joinedload(models.Expense.group)
-        )
-        .filter(models.Expense.group_id.in_(group_ids))
-        .order_by(models.Expense.created_date.desc())
-        .limit(50) # Limit to 50 recent transactions
-        .all()
-    )
-    
-    return [format_expense(e) for e in expenses]
+def get_my_expenses(
+    limit: int = 10,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Returns paginated expenses where the user is the payer OR a participant
+    with share_amount > 0. Excludes expenses where the user has no stake.
+    """
+    expenses, total = crud.get_user_expenses(db, current_user.id, limit=limit, offset=offset)
+    return {
+        "expenses": [format_expense(e) for e in expenses],
+        "total": total
+    }
 
 
 # --- GROUPS ---
@@ -411,20 +403,6 @@ def delete_expense(expense_id: UUID, db: Session = Depends(get_db), current_user
 # --- SETTLEMENTS ---
 @app.post("/settlements/")
 def create_settlement(settlement: schemas.SettlementCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    now_utc = datetime.now(timezone.utc)
-    seven_days_ago = now_utc - timedelta(days=7)
-
-    existing = db.query(models.Settlement).filter(
-        models.Settlement.group_id == settlement.group_id,
-        models.Settlement.sender_id == current_user.id,
-        models.Settlement.receiver_id == settlement.receiver_id,
-        models.Settlement.status == "PENDING",
-        models.Settlement.created_at >= seven_days_ago
-    ).first()
-
-    if existing:
-        raise HTTPException(status_code=400, detail="ALREADY_PENDING")
-
     db_settlement = crud.create_settlement(db, settlement, current_user.id)
     return {
         "id": str(db_settlement.id),
@@ -474,7 +452,7 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
 
     group_ids = [g.id for g in my_groups]
     if not group_ids:
-        return {"global_debts": [], "global_requests": []}
+        return {"global_debts": [], "global_requests": [], "total_gross_debt": 0.0, "total_pending_sent": 0.0, "effective_total": 0.0}
 
     # ── Bulk i_owe across all groups ──────────────────────────────────────────
     i_owe_rows = (
@@ -492,7 +470,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
         .group_by(models.Expense.group_id, models.Expense.payer_id)
         .all()
     )
-    # key: (group_id_str, other_user_id_str)
     i_owe_map = {(str(r.group_id), str(r.other_user_id)): float(r.total) for r in i_owe_rows}
 
     # ── Bulk owed_to_me across all groups ─────────────────────────────────────
@@ -513,23 +490,46 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
     )
     owed_to_me_map = {(str(r.group_id), str(r.other_user_id)): float(r.total) for r in owed_to_me_rows}
 
-    # ── Bulk pending-sent settlements across all groups ───────────────────────
+    # ── Bulk pending-sent settlements with amounts per (group, receiver) ──────
+    # We need the SUM of pending amounts per pair, not just a boolean flag.
     pending_sent_rows = (
-        db.query(models.Settlement.group_id, models.Settlement.receiver_id)
+        db.query(
+            models.Settlement.group_id,
+            models.Settlement.receiver_id,
+            func.sum(models.Settlement.amount).label("pending_total")
+        )
         .filter(
             models.Settlement.group_id.in_(group_ids),
             models.Settlement.sender_id == current_user.id,
             models.Settlement.status == "PENDING",
             models.Settlement.created_at >= seven_days_ago,
         )
+        .group_by(models.Settlement.group_id, models.Settlement.receiver_id)
         .all()
     )
-    pending_sent_set = {(str(r.group_id), str(r.receiver_id)) for r in pending_sent_rows}
+    # key: (group_id_str, receiver_id_str) -> pending_amount_float
+    pending_sent_map = {(str(r.group_id), str(r.receiver_id)): float(r.pending_total) for r in pending_sent_rows}
+
+    # ── Bulk pending-received settlements with amounts per (group, sender) ────
+    pending_received_rows = (
+        db.query(
+            models.Settlement.group_id,
+            models.Settlement.sender_id,
+            func.sum(models.Settlement.amount).label("pending_total")
+        )
+        .filter(
+            models.Settlement.group_id.in_(group_ids),
+            models.Settlement.receiver_id == current_user.id,
+            models.Settlement.status == "PENDING",
+            models.Settlement.created_at >= seven_days_ago,
+        )
+        .group_by(models.Settlement.group_id, models.Settlement.sender_id)
+        .all()
+    )
+    pending_received_map = {(str(r.group_id), str(r.sender_id)): float(r.pending_total) for r in pending_received_rows}
 
     # ── Build global_debts from precomputed maps ──────────────────────────────
-    # Collect all (group, other_user) pairs that appear in either map
     all_pairs = set(i_owe_map.keys()) | set(owed_to_me_map.keys())
-    # Build a lookup for member names
     member_name_map: dict[str, str] = {}
     for g in my_groups:
         for m in g.members:
@@ -538,19 +538,61 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
     group_name_map = {str(g.id): g.name for g in my_groups}
 
     global_debts = []
+    expected_payments = []
+    
+    total_gross_debt = 0.0
+    total_pending_sent = 0.0
+    
+    total_owed_to_me = 0.0
+    total_pending_received = 0.0
+
     for (gid_str, uid_str) in all_pairs:
         if uid_str == str(current_user.id):
             continue
-        net_bal = i_owe_map.get((gid_str, uid_str), 0.0) - owed_to_me_map.get((gid_str, uid_str), 0.0)
-        if net_bal > 0:
+        
+        gross_debt = i_owe_map.get((gid_str, uid_str), 0.0) - owed_to_me_map.get((gid_str, uid_str), 0.0)
+        
+        # User owes money
+        if gross_debt > 0:
+            pending_sent_amount = pending_sent_map.get((gid_str, uid_str), 0.0)
+            effective_amount = max(0.0, round(gross_debt - pending_sent_amount, 2))
+            is_pending = pending_sent_amount > 0
+
+            total_gross_debt += gross_debt
+            total_pending_sent += pending_sent_amount
+
             global_debts.append({
                 "user_id": uid_str,
                 "user_name": member_name_map.get(uid_str, "Unknown"),
                 "group_name": group_name_map.get(gid_str, "Unknown"),
                 "group_id": gid_str,
-                "amount": round(net_bal, 2),
-                "is_pending": (gid_str, uid_str) in pending_sent_set,
+                "amount": round(gross_debt, 2),
+                "pending_sent_amount": round(pending_sent_amount, 2),
+                "effective_amount": effective_amount,
+                "is_pending": is_pending,
             })
+            
+        # Someone owes user money
+        elif gross_debt < 0:
+            net_owed = abs(gross_debt)
+            pending_received_amount = pending_received_map.get((gid_str, uid_str), 0.0)
+            effective_receive_amount = max(0.0, round(net_owed - pending_received_amount, 2))
+            
+            total_owed_to_me += net_owed
+            total_pending_received += pending_received_amount
+            
+            expected_payments.append({
+                "user_id": uid_str,
+                "user_name": member_name_map.get(uid_str, "Unknown"),
+                "group_name": group_name_map.get(gid_str, "Unknown"),
+                "group_id": gid_str,
+                "amount": round(net_owed, 2),
+                "pending_received_amount": round(pending_received_amount, 2),
+                "effective_amount": effective_receive_amount,
+            })
+
+    effective_total = max(0.0, round(total_gross_debt - total_pending_sent, 2))
+    effective_receive_total = max(0.0, round(total_owed_to_me - total_pending_received, 2))
 
     # ── Incoming pending settlements ──────────────────────────────────────────
     pending_requests = (
@@ -566,6 +608,15 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
 
     return {
         "global_debts": global_debts,
+        "total_gross_debt": round(total_gross_debt, 2),
+        "total_pending_sent": round(total_pending_sent, 2),
+        "effective_total": effective_total,
+        
+        "expected_payments": expected_payments,
+        "total_owed_to_me": round(total_owed_to_me, 2),
+        "total_pending_received": round(total_pending_received, 2),
+        "effective_receive_total": effective_receive_total,
+        
         "global_requests": [
             {
                 "id": str(s.id),

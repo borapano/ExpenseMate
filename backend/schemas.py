@@ -27,6 +27,7 @@ class ExpenseCategory(str, enum.Enum):
     travel = "Travel"
     health = "Health"
     bills_subscriptions = "Bills & Subscriptions"
+    other = "Other"
 
 # --- USER SCHEMAS ---
 class UserBase(BaseModel):

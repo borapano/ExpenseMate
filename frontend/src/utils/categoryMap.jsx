@@ -14,7 +14,8 @@ export const CATEGORIES = [
     "Shopping",
     "Travel",
     "Health",
-    "Bills & Subscriptions"
+    "Bills & Subscriptions",
+    "Other"
 ];
 
 export const getCategoryDetails = (categoryName) => {
@@ -78,6 +79,12 @@ export const getCategoryDetails = (categoryName) => {
                 icon: <CreditCard size={20} />,
                 colorClass: "bg-slate-500/15 text-slate-600",
                 hexColor: "#475569" 
+            };
+        case "Other":
+            return {
+                icon: <HelpCircle size={20} />,
+                colorClass: "bg-gray-500/15 text-gray-600",
+                hexColor: "#6b7280"
             };
         default:
             return {

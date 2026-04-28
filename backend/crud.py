@@ -419,22 +419,48 @@ def delete_expense(db: Session, expense_id: UUID, current_user_id: UUID):
     db.commit()
     return True
 
+def get_user_expenses(db: Session, user_id: UUID, limit: int = 10, offset: int = 0):
+    """
+    Returns expenses where the user is either:
+      - the payer, OR
+      - a participant with share_amount > 0
+    Expenses where the user has no stake (share_amount = 0) are excluded.
+    """
+    from sqlalchemy import or_
+
+    # Sub-query: expense IDs where user is a participant with share > 0
+    participant_expense_ids = (
+        db.query(models.ExpenseParticipant.expense_id)
+        .filter(
+            models.ExpenseParticipant.user_id == user_id,
+            models.ExpenseParticipant.share_amount > 0
+        )
+        .subquery()
+    )
+
+    base_query = (
+        db.query(models.Expense)
+        .options(
+            joinedload(models.Expense.payer),
+            joinedload(models.Expense.participants).joinedload(models.ExpenseParticipant.user),
+            joinedload(models.Expense.group)
+        )
+        .filter(
+            or_(
+                models.Expense.payer_id == user_id,
+                models.Expense.id.in_(participant_expense_ids)
+            )
+        )
+        .order_by(models.Expense.created_date.desc())
+    )
+
+    total = base_query.count()
+    expenses = base_query.offset(offset).limit(limit).all()
+    return expenses, total
+
 # ---------------- SETTLEMENT CRUD ----------------
 
 def create_settlement(db: Session, settlement: schemas.SettlementCreate, sender_id: UUID):
-    # Kontrolli i fundit për siguri brenda transaksionit
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    existing = db.query(models.Settlement).filter(
-        models.Settlement.group_id == settlement.group_id,
-        models.Settlement.sender_id == sender_id,
-        models.Settlement.receiver_id == settlement.receiver_id,
-        models.Settlement.status == "PENDING",
-        models.Settlement.created_at >= seven_days_ago
-    ).first()
-
-    if existing:
-        raise HTTPException(status_code=400, detail="ALREADY_PENDING")
-
     db_settlement = models.Settlement(
         id=uuid4(),
         group_id=settlement.group_id,

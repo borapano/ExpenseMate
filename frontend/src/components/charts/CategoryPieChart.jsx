@@ -3,18 +3,17 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell,
-  Tooltip,
   Sector,
+  Cell
 } from 'recharts';
-import { getCategoryDetails } from '../../utils/categoryMap';
 
 const renderActiveShape = (props) => {
   const {
     cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value,
   } = props;
-  // Guard: payload or name may be absent during recharts edge-case renders
+
   if (!payload || !payload.name) return null;
+
   return (
     <g>
       <text x={cx} y={cy - 10} textAnchor="middle" fill="#1A3263" className="text-sm" fontSize={13} fontWeight={700}>
@@ -32,6 +31,9 @@ const renderActiveShape = (props) => {
 const CategoryPieChart = ({ data }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const safeData = Array.isArray(data) && data.length > 0 ? data : [];
+
+  // 11 Ngjyra të sinkronizuara bazuar në paletën tënde
+  const chartPalette = ["#1A3263", "#224482", "#2E58A3", "#3B6CC5", "#547792", "#6B8EAB", "#82A5C4", "#9BBCCF", "#FFC570", "#FFD699", "#EFD2B0"];
 
   if (safeData.length === 0) {
     return (
@@ -55,13 +57,13 @@ const CategoryPieChart = ({ data }) => {
           activeShape={renderActiveShape}
           onMouseEnter={(_, index) => setActiveIndex(index)}
         >
-          {safeData.map((entry, index) => {
-            const details = getCategoryDetails(entry.name);
-            const fill = details && details.hexColor ? details.hexColor : (entry.color || '#547792');
-            return (
-              <Cell key={`cell-${index}`} fill={fill} stroke="none" />
-            );
-          })}
+          {safeData.map((entry, index) => (
+            <Cell
+              key={`cell-${index}`}
+              fill={chartPalette[index % chartPalette.length]}
+              stroke="none"
+            />
+          ))}
         </Pie>
       </PieChart>
     </ResponsiveContainer>
