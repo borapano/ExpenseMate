@@ -26,7 +26,7 @@ const BudgetProgressCard = ({ spentAmount, totalBudget }) => {
                 <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{
-                        width: `${Math.min(budgetPct, 100)}%`,
+                        width: `${budgetPct}%`,
                         background: getBarColor(budgetPct),
                     }}
                 />

@@ -32,12 +32,10 @@ const ToPayCard: React.FC<Props> = ({ amount, effectiveAmount = amount, pendingA
                 <p className="text-3xl font-black text-red-600 tracking-tight">
                     {formattedAmount}
                 </p>
-                {pendingAmount > 0 && (
-                    <p className="text-xs font-bold text-amber-500 flex items-center gap-1">
-                        <Clock size={12} />
-                        {formattedPending} in verification
-                    </p>
-                )}
+                <p className="text-xs font-bold text-amber-500 flex items-center gap-1">
+                    <Clock size={12} />
+                    {formattedPending} in verification
+                </p>
             </div>
 
             <p className="text-[10px] text-secondary/50 font-bold mt-1">

@@ -419,12 +419,13 @@ def delete_expense(db: Session, expense_id: UUID, current_user_id: UUID):
     db.commit()
     return True
 
-def get_user_expenses(db: Session, user_id: UUID, limit: int = 10, offset: int = 0):
+def get_user_expenses(db: Session, user_id: UUID, limit: int = 10, offset: int = 0, group_id: UUID = None):
     """
     Returns expenses where the user is either:
       - the payer, OR
       - a participant with share_amount > 0
     Expenses where the user has no stake (share_amount = 0) are excluded.
+    If group_id is provided, further filters by that group.
     """
     from sqlalchemy import or_
 
@@ -438,6 +439,16 @@ def get_user_expenses(db: Session, user_id: UUID, limit: int = 10, offset: int =
         .subquery()
     )
 
+    query_filters = [
+        or_(
+            models.Expense.payer_id == user_id,
+            models.Expense.id.in_(participant_expense_ids)
+        )
+    ]
+
+    if group_id:
+        query_filters.append(models.Expense.group_id == group_id)
+
     base_query = (
         db.query(models.Expense)
         .options(
@@ -445,12 +456,7 @@ def get_user_expenses(db: Session, user_id: UUID, limit: int = 10, offset: int =
             joinedload(models.Expense.participants).joinedload(models.ExpenseParticipant.user),
             joinedload(models.Expense.group)
         )
-        .filter(
-            or_(
-                models.Expense.payer_id == user_id,
-                models.Expense.id.in_(participant_expense_ids)
-            )
-        )
+        .filter(*query_filters)
         .order_by(models.Expense.created_date.desc())
     )
 

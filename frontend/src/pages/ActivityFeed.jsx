@@ -42,9 +42,13 @@ const MonthlyBudgetEditor = ({ budget, onSave }) => {
   useEffect(() => { setTempBudget(budget); }, [budget]);
 
   const handleSave = async () => {
+    const floatBudget = parseFloat(tempBudget);
+    if (isNaN(floatBudget) || floatBudget < 0) {
+      alert("Please enter a valid budget (0 or greater)");
+      return;
+    }
     setIsLoading(true);
     try {
-      const floatBudget = parseFloat(tempBudget);
       await api.put('/users/me/budget', { monthly_budget: floatBudget });
       if (onSave) onSave(floatBudget);
       setIsEditing(false);

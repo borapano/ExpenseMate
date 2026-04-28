@@ -35,11 +35,13 @@ const Expenses: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [expenses, setExpenses] = useState<any[]>([]);
     const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+    const [pendingDebts, setPendingDebts] = useState<any[]>([]);
     const [expectedPayments, setExpectedPayments] = useState<any[]>([]);
 
     // UI states
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedGroup, setSelectedGroup] = useState("All Groups");
+    const [groups, setGroups] = useState<any[]>([]);
+    const [selectedGroup, setSelectedGroup] = useState<{ id: string | null, name: string }>({ id: null, name: "All Groups" });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     // Pagination states
@@ -69,12 +71,13 @@ const Expenses: React.FC = () => {
         try {
             setLoading(true);
             const [expensesRes, groupsRes, dashboardRes] = await Promise.all([
-                api.get('/users/me/expenses?limit=5&offset=0'),
+                api.get(`/users/me/expenses?limit=5&offset=0${selectedGroup.id ? `&group_id=${selectedGroup.id}` : ''}`),
                 api.get('/groups/me'),
                 api.get('/users/me/settlement_dashboard')
             ]);
             setExpenses(expensesRes.data?.expenses || []);
             setTotalExpenses(expensesRes.data?.total || 0);
+            setGroups(groupsRes.data || []);
             setVisibleCount(5);
 
             // Fetch from dashboard instead of groups where applicable
@@ -102,7 +105,7 @@ const Expenses: React.FC = () => {
     const handleSeeMore = async () => {
         try {
             const currentOffset = expenses.length;
-            const res = await api.get(`/users/me/expenses?limit=5&offset=${currentOffset}`);
+            const res = await api.get(`/users/me/expenses?limit=5&offset=${currentOffset}${selectedGroup.id ? `&group_id=${selectedGroup.id}` : ''}`);
             setExpenses(prev => [...prev, ...(res.data?.expenses || [])]);
             setTotalExpenses(res.data?.total || 0);
             setVisibleCount(prev => prev + 5);
@@ -117,7 +120,9 @@ const Expenses: React.FC = () => {
         setExpenses(prev => prev.slice(0, 5));
     };
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        fetchData(); 
+    }, [selectedGroup.id]);
 
     const handleConfirmRequest = async (id: string) => {
         try {
@@ -158,18 +163,14 @@ const Expenses: React.FC = () => {
     };
 
     const uniqueGroups = useMemo(() => {
-        const groups = expenses.map((e: any) => e.group_name || `Group ${e.group_id.slice(0, 6)}`);
-        return ["All", ...new Set(groups)];
-    }, [expenses]);
+        return [{ id: null, name: "All Groups" }, ...groups.map(g => ({ id: g.id, name: g.name }))];
+    }, [groups]);
 
     const filteredExpenses = useMemo(() => {
         return expenses.filter((e: any) => {
-            const matchesSearch = e.description.toLowerCase().includes(searchQuery.toLowerCase());
-            const groupName = e.group_name || `Group ${e.group_id.slice(0, 6)}`;
-            const matchesGroup = selectedGroup === "All" || groupName === selectedGroup;
-            return matchesSearch && matchesGroup;
+            return e.description.toLowerCase().includes(searchQuery.toLowerCase());
         });
-    }, [expenses, searchQuery, selectedGroup]);
+    }, [expenses, searchQuery]);
 
     const hasMore = expenses.length < totalExpenses;
 

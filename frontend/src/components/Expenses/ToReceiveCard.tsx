@@ -32,12 +32,10 @@ const ToReceiveCard: React.FC<Props> = ({ amount, effectiveAmount = amount, pend
                 <p className="text-3xl font-black text-emerald-600 tracking-tight">
                     {formattedAmount}
                 </p>
-                {pendingAmount > 0 && (
-                    <p className="text-xs font-bold text-amber-500 flex items-center gap-1">
-                        <Clock size={12} />
-                        {formattedPending} awaiting confirmation
-                    </p>
-                )}
+                <p className="text-xs font-bold text-amber-500 flex items-center gap-1">
+                    <Clock size={12} />
+                    {formattedPending} awaiting confirmation
+                </p>
             </div>
 
             <p className="text-[10px] text-secondary/50 font-bold mt-1">

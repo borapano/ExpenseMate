@@ -178,6 +178,7 @@ def get_analytics_charts(db: Session = Depends(get_db), current_user: models.Use
 def get_my_expenses(
     limit: int = 10,
     offset: int = 0,
+    group_id: UUID = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -185,7 +186,7 @@ def get_my_expenses(
     Returns paginated expenses where the user is the payer OR a participant
     with share_amount > 0. Excludes expenses where the user has no stake.
     """
-    expenses, total = crud.get_user_expenses(db, current_user.id, limit=limit, offset=offset)
+    expenses, total = crud.get_user_expenses(db, current_user.id, limit=limit, offset=offset, group_id=group_id)
     return {
         "expenses": [format_expense(e) for e in expenses],
         "total": total

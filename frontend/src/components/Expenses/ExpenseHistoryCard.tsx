@@ -9,9 +9,9 @@ interface Props {
     filteredExpenses: any[];
     searchQuery: string;
     setSearchQuery: (val: string) => void;
-    selectedGroup: string;
-    setSelectedGroup: (val: string) => void;
-    uniqueGroups: string[];
+    selectedGroup: { id: string | null, name: string };
+    setSelectedGroup: (val: { id: string | null, name: string }) => void;
+    uniqueGroups: { id: string | null, name: string }[];
     isFilterOpen: boolean;
     setIsFilterOpen: (val: boolean) => void;
     hasMore: boolean;
@@ -78,12 +78,13 @@ const ExpenseHistoryCard: React.FC<Props> = ({
 
                     <div className="relative">
                         <button
+                            type="button"
                             onClick={() => setIsFilterOpen(!isFilterOpen)}
                             className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-secondary/20 rounded-xl text-sm font-semibold text-primary transition-all hover:bg-gray-100 min-w-[140px] justify-between"
                         >
                             <div className="flex items-center gap-2">
                                 <Filter size={16} className="text-secondary/60" />
-                                {selectedGroup}
+                                {selectedGroup.name}
                             </div>
                             <ChevronDown size={14} className={`text-secondary transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
                         </button>
@@ -93,13 +94,14 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                                 <div className="max-h-60 overflow-y-auto custom-scrollbar">
                                     {uniqueGroups.map(grp => (
                                         <button
-                                            key={grp}
+                                            key={grp.id || 'all'}
+                                            type="button"
                                             onClick={() => { setSelectedGroup(grp); setIsFilterOpen(false); }}
-                                            className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold ${selectedGroup === grp ? 'bg-primary/5 text-primary' : 'hover:bg-gray-50 text-secondary'
+                                            className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold ${selectedGroup.id === grp.id ? 'bg-primary/5 text-primary' : 'hover:bg-gray-50 text-secondary'
                                                 }`}
                                         >
-                                            <span className="truncate">{grp}</span>
-                                            {selectedGroup === grp && <Check size={14} className="text-accent" />}
+                                            <span className="truncate">{grp.name}</span>
+                                            {selectedGroup.id === grp.id && <Check size={14} className="text-accent" />}
                                         </button>
                                     ))}
                                 </div>
