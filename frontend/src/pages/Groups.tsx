@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import api from '../api';
 import { CreateGroupModal } from '../components/GroupModals';
 import {
     LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut,
-    PlusCircle, Hash, ArrowRight, ShieldCheck, AlertCircle
+    ShieldCheck, AlertCircle
 } from 'lucide-react';
+
+// Importimi i komponentëve të rinj (Default Imports)
+import CreateGroupCard from '../components/Groups/CreateGroupCard';
+import JoinGroupCard from '../components/Groups/JoinGroupCard';
+import GroupCard from '../components/Groups/GroupCard';
 
 // ─── NAV HELPER ─────────────────────────────────────────────────────────────
 const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to: string }) => (
@@ -30,33 +35,14 @@ const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to
     </NavLink>
 );
 
-// ─── TYPES ──────────────────────────────────────────────────────────────────
-interface GroupParticipant {
-    user_id: string;
-    user_name: string;
-}
-
-interface GroupOut {
-    id: string;
-    name: string;
-    description: string;
-    invite_code: string;
-    total_spending?: number;
-    net_balance?: number;
-    members?: GroupParticipant[];
-}
-
 // ─── MAIN COMPONENT ─────────────────────────────────────────────────────────
-
 const Groups: React.FC = () => {
     const { user, logout } = useAuth();
     const { groups, loading, refreshAllData } = useData();
-    const navigate = useNavigate();
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [inviteCode, setInviteCode] = useState("");
     const [isJoining, setIsJoining] = useState(false);
-
     const [toastMessage, setToastMessage] = useState<{ title: string, type: 'success' | 'error' } | null>(null);
 
     const showToast = (title: string, type: 'success' | 'error' = 'success') => {
@@ -81,7 +67,7 @@ const Groups: React.FC = () => {
             await api.post('/groups/join', { invite_code: cleanCode });
             showToast("You've successfully joined the group!");
             setInviteCode("");
-            refreshAllData(); // Refresh data explicitly
+            refreshAllData();
         } catch (err: any) {
             console.error("Error joining group:", err);
             showToast(err.response?.data?.detail || "Invalid code or you're already a member.", "error");
@@ -162,55 +148,16 @@ const Groups: React.FC = () => {
 
                 <div className="flex-1 overflow-y-auto px-8 pb-10 space-y-8 custom-scrollbar">
 
-                    {/* ── TOP SECTION: ACTION CARDS ── */}
+                    {/* ── TOP SECTION: ACTION CARDS (EXTRACTED) ── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <CreateGroupCard onClick={() => setIsCreateModalOpen(true)} />
 
-                        {/* 1. Create New Group */}
-                        <div
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="bg-primary hover:bg-primary/95 text-white rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                            <div>
-                                <h2 className="text-lg font-black tracking-tight flex items-center gap-2 mb-1.5">
-                                    <PlusCircle className="text-accent" size={20} /> Create New Group
-                                </h2>
-                                <p className="text-sm font-medium text-secondary/80 max-w-sm">
-                                    Start a new expense hub for your trips, apartment, or events.
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                                <ArrowRight className="text-accent" />
-                            </div>
-                        </div>
-
-                        {/* 2. Join Group Inline */}
-                        <div className="bg-white border border-secondary/10 rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden transition-all hover:bg-gray-50/50">
-                            <div className="absolute -top-12 -right-12 w-32 h-32 bg-accent/5 rounded-full pointer-events-none" />
-
-                            <div className="w-full">
-                                <h2 className="text-lg font-black text-primary tracking-tight flex items-center gap-2 mb-3">
-                                    <Hash className="text-primary/50" size={20} /> Join a Group
-                                </h2>
-
-                                <form onSubmit={handleJoinGroup} className="flex gap-2 w-full max-w-sm relative z-10">
-                                    <input
-                                        type="text"
-                                        placeholder="Enter 6-char Code"
-                                        maxLength={6}
-                                        value={inviteCode}
-                                        onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                                        className="flex-1 min-w-0 bg-[#F7F4F0] border border-secondary/10 rounded-xl px-4 py-2.5 text-sm font-black uppercase text-primary tracking-widest outline-none focus:border-accent transition-colors placeholder:text-secondary/30 placeholder:tracking-normal"
-                                    />
-                                    <button
-                                        type="submit"
-                                        disabled={isJoining}
-                                        className="bg-primary text-white text-xs font-bold uppercase tracking-widest px-5 py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
-                                    >
-                                        {isJoining ? '...' : 'Join'}
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
+                        <JoinGroupCard
+                            inviteCode={inviteCode}
+                            setInviteCode={setInviteCode}
+                            onJoin={handleJoinGroup}
+                            isJoining={isJoining}
+                        />
                     </div>
 
                     {/* ── MAIN GRID: GROUP CARDS ── */}
@@ -235,64 +182,9 @@ const Groups: React.FC = () => {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {groups.map((group) => {
-                                    const netBal = Number(group.net_balance || 0);
-                                    const members = group.members || [];
-
-                                    return (
-                                        <div
-                                            key={group.id}
-                                            onClick={() => navigate(`/groups/${group.id}`)}
-                                            className="bg-white/80 p-6 rounded-2xl shadow-sm border border-secondary/10 flex flex-col hover:scale-105 hover:bg-white hover:shadow-lg transition-all duration-300 cursor-pointer group"
-                                        >
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex-1 pr-2">
-                                                    <h3 className="text-lg font-black text-primary truncate" title={group.name}>{group.name}</h3>
-                                                    {group.description && (
-                                                        <p className="text-xs text-secondary/60 font-semibold line-clamp-1 mt-1">
-                                                            {group.description}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                                <div className="w-8 h-8 rounded-full bg-[#F7F4F0] flex items-center justify-center text-[10px] font-black text-primary/40 shrink-0">
-                                                    {group.invite_code}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex-1 grid grid-cols-2 gap-4 bg-[#F7F4F0] p-4 rounded-xl mt-2 mb-5">
-                                                <div>
-                                                    <p className="text-[10px] font-black text-secondary/50 uppercase tracking-widest mb-1">Total Spent</p>
-                                                    <p className="font-bold text-sm text-primary">€{Number(group.total_spending || 0).toFixed(2)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-black text-secondary/50 uppercase tracking-widest mb-1">Your Net Bal</p>
-                                                    <p className={`font-black text-base ${netBal > 0 ? 'text-emerald-500' : netBal < 0 ? 'text-danger' : 'text-primary'}`}>
-                                                        {netBal > 0 ? '+' : ''}{netBal.toFixed(2)}€
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-between mt-auto">
-                                                <div className="flex -space-x-2">
-                                                    {members.slice(0, 4).map((m, idx) => (
-                                                        <div key={idx} className="w-8 h-8 rounded-full border-2 border-white bg-secondary/10 flex items-center justify-center text-[10px] font-bold text-primary shadow-sm" title={m.user_name}>
-                                                            {m.user_name.charAt(0).toUpperCase()}
-                                                        </div>
-                                                    ))}
-                                                    {members.length > 4 && (
-                                                        <div className="w-8 h-8 rounded-full border-2 border-white bg-primary text-white flex items-center justify-center text-[10px] font-bold shadow-sm">
-                                                            +{members.length - 4}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <span className="text-xs font-bold text-accent group-hover:underline flex items-center gap-1">
-                                                    View Details <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                {groups.map((group) => (
+                                    <GroupCard key={group.id} group={group} />
+                                ))}
                             </div>
                         )}
                     </div>
