@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Component } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { useData } from '../DataContext';
 import api from '../api';
 
 import {
@@ -73,7 +74,17 @@ const MonthlyBudgetEditor = ({ budget, onSave }) => {
               <span className="text-sm font-bold text-primary">€</span>
               <input
                 type="number" step="0.01" min="0" autoFocus value={tempBudget}
-                onChange={(e) => setTempBudget(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || parseFloat(val) >= 0) {
+                    setTempBudget(val);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e') {
+                    e.preventDefault();
+                  }
+                }}
                 className="w-24 text-sm font-black text-primary bg-transparent outline-none border-b border-secondary/20 focus:border-accent"
               />
             </div>
@@ -137,26 +148,28 @@ const ChartCard = ({ title, children, legend }) => (
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 const ActivityFeed = () => {
-  const { user, logout } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [charts, setCharts] = useState(null);
-  const [monthlyBudget, setMonthlyBudget] = useState(1000);
-  const [loading, setLoading] = useState(true);
+  const { user, logout, refreshUser } = useAuth();
+  const { analytics, refreshAllData, loading } = useData();
+  
+  const stats = analytics.stats;
+  const charts = analytics.charts;
+  // Use user.monthly_budget directly from AuthContext as it's the primary source
+  const monthlyBudget = user?.monthly_budget || 1000;
 
   useEffect(() => {
-    const loadAnalytics = async () => {
-      try {
-        const [meRes, statsRes, chartsRes] = await Promise.all([
-          api.get('/users/me'), api.get('/users/me/analytics/stats'), api.get('/users/me/analytics/charts'),
-        ]);
-        setMonthlyBudget(meRes.data?.monthly_budget || 1000);
-        setStats(statsRes.data);
-        setCharts(chartsRes.data);
-      } catch (err) { console.error("Failed to load analytics", err); }
-      finally { setLoading(false); }
-    };
-    loadAnalytics();
-  }, []);
+    refreshAllData();
+  }, [refreshAllData]);
+
+  if (loading && !stats) {
+    return (
+      <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary items-center justify-center">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+          <div className="w-12 h-12 bg-primary rounded-xl" />
+          <p className="text-sm font-black text-primary/40 uppercase tracking-widest">Loading Analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
@@ -181,7 +194,13 @@ const ActivityFeed = () => {
         <header className="px-8 py-6 flex items-center justify-between border-b bg-white/30 backdrop-blur-md sticky top-0 z-10">
           <div><h1 className="text-xl font-black">Spending Overview</h1><p className="text-sm text-secondary/70 font-semibold">Your real-time financial analysis</p></div>
           <div className="flex items-center gap-4">
-            <MonthlyBudgetEditor budget={monthlyBudget} onSave={setMonthlyBudget} />
+            <MonthlyBudgetEditor 
+              budget={monthlyBudget} 
+              onSave={async () => {
+                await refreshUser();
+                await refreshAllData();
+              }} 
+            />
             <div className="w-[1px] h-8 bg-secondary/10 hidden sm:block" />
             <button className="relative p-2 text-secondary hover:text-primary"><Bell size={22} /><span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full" /></button>
             <div className="flex items-center gap-3 bg-white p-1 pr-4 rounded-full shadow-sm border border-secondary/10">

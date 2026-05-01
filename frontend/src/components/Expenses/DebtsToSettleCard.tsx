@@ -1,100 +1,94 @@
 import React, { useMemo } from 'react';
-import { CreditCard, ShieldCheck, Clock } from 'lucide-react';
+import { ShieldCheck, Clock } from 'lucide-react';
 
 interface Props {
-    debts: any[];
+    expenses: any[];
     payingDebts: Set<string>;
-    onPay: (debt: any) => void;
+    onPay: (expense: any) => void;
 }
 
-const DebtsToSettleCard: React.FC<Props> = ({ debts, payingDebts, onPay }) => {
-    const sortedDebts = useMemo(() => {
-        return [...debts].sort((a, b) => {
-            const aEffective = Number(a.effective_amount ?? a.amount);
-            const bEffective = Number(b.effective_amount ?? b.amount);
-            
-            const aActionable = aEffective > 0 && !a.is_pending;
-            const bActionable = bEffective > 0 && !b.is_pending;
-
-            if (aActionable && !bActionable) return -1;
-            if (!aActionable && bActionable) return 1;
-            
-            // Priority 2: Pending (Info)
-            if (a.is_pending && !b.is_pending) return -1;
-            if (!a.is_pending && b.is_pending) return 1;
-
-            return 0;
+const DebtsToSettleCard: React.FC<Props> = ({ expenses, payingDebts, onPay }) => {
+    const sortedExpenses = useMemo(() => {
+        return [...expenses].sort((a, b) => {
+            return b.statusAmount - a.statusAmount;
         });
-    }, [debts]);
+    }, [expenses]);
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-secondary/10 p-6 flex flex-col flex-1 h-[400px] transition-shadow duration-200 hover:shadow-md">
-            <h2 className="text-[10px] font-black uppercase tracking-widest text-primary/70 mb-5 flex items-center gap-2 shrink-0">
-                <CreditCard size={14} /> Debts to Settle
-            </h2>
+        <div className="bg-white rounded-2xl border border-secondary/10 shadow-sm flex flex-col flex-1 h-[358px] overflow-hidden">
+            {/* Header */}
+            <div className="p-6 pb-4 flex items-center justify-between shrink-0 bg-secondary/[0.02] border-b border-secondary/5">
+                <div className="flex flex-col text-left">
+                    <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/60">
+                        Debts to Settle
+                    </h2>
+                    <p className="text-[11px] text-primary/40 mt-0.5 italic font-medium">Your pending balances</p>
+                </div>
+                <span className="text-[10px] bg-primary text-white font-bold px-2.5 py-1 rounded-lg shadow-sm shadow-primary/20">
+                    {sortedExpenses.length} Items
+                </span>
+            </div>
 
-            {sortedDebts.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center gap-2 text-secondary/40">
-                    <ShieldCheck size={32} />
-                    <p className="text-[10px] font-bold uppercase tracking-wider">No pending debts!</p>
+            {sortedExpenses.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-secondary/20">
+                    <ShieldCheck size={32} strokeWidth={1.2} className="mb-2" />
+                    <p className="text-[10px] font-bold uppercase tracking-widest">All settled up</p>
                 </div>
             ) : (
-                <div className="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1 pb-2">
-                    {sortedDebts.map((debt: any) => {
-                        const debtId = `${debt.group_id}-${debt.user_id}`;
-
-                        // Kontrollojmë nëse sapo u klikua (state lokal) 
-                        const isProcessing = payingDebts.has(debtId);
-                        const effectiveAmount = Number(debt.effective_amount ?? debt.amount);
-                        const isAlreadyPending = debt.is_pending;
-                        const isDisabled = isProcessing || effectiveAmount <= 0;
+                <div className="flex-1 overflow-y-auto custom-scrollbar-gray px-6 py-4 flex flex-col gap-3">
+                    {sortedExpenses.map((expense: any) => {
+                        const debtId = `expense-${expense.id}`;
+                        const displayAmount = Math.abs(Number(expense.statusAmount));
+                        const isPaying = payingDebts.has(debtId);
 
                         return (
-                            <div key={debtId} className={`border rounded-xl p-4 flex flex-col gap-3 relative transition-all shrink-0 ${isDisabled ? 'bg-gray-50 border-gray-100' : 'bg-red-50/30 border-red-100/50'}`}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-bold text-primary text-sm">{debt.user_name || 'Anonymous'}</p>
-                                        <p className="text-[10px] text-secondary/60 font-semibold">{debt.group_name || 'Group'}</p>
-                                    </div>
-                                    <div className="text-right flex flex-col items-end">
-                                        <p className={`font-black text-base ${isDisabled ? 'text-secondary/50' : 'text-red-500'}`}>
-                                            €{effectiveAmount.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <div
+                                key={expense.id}
+                                className="w-full rounded-xl p-4 border transition-all duration-200 min-h-[76px] flex flex-col justify-center shrink-0 bg-white border-secondary/10 shadow-sm shadow-transparent hover:shadow-sm hover:border-red-100"
+                            >
+                                <div className="flex justify-between items-center w-full">
+                                    <div className="flex flex-col text-left max-w-[60%]">
+                                        <p className="text-[13px] font-bold text-primary leading-tight truncate">
+                                            {expense.description}
                                         </p>
-                                        {isAlreadyPending && (
-                                            <p className="text-[10px] font-bold text-amber-500 flex items-center gap-1 mt-0.5 uppercase tracking-wider">
-                                                <Clock size={10} />
-                                                {effectiveAmount <= 0 ? 'Verification' : 'Partial'}
-                                            </p>
+                                        <p className="text-[11px] text-secondary/60 capitalize font-medium truncate">
+                                            to {expense.payer_name || 'Member'} • {expense.group_name || 'Personal'}
+                                        </p>
+                                    </div>
+
+                                    <div className="flex flex-col items-end gap-1">
+                                        <p className="text-[14px] font-black leading-none text-red-500">
+                                            -€{displayAmount.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
+
+                                        {expense.isPending ? (
+                                            <div className="px-2 py-1 bg-amber-50 rounded-md border border-amber-100/50">
+                                                <p className="text-[9px] font-bold text-amber-500 flex items-center gap-1 uppercase tracking-tighter">
+                                                    <Clock size={10} strokeWidth={2.5} /> Awaiting Confirmation
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                disabled={isPaying}
+                                                onClick={() => onPay(expense)}
+                                                className="bg-primary hover:bg-primary/90 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-[0.1em] px-4 py-1.5 rounded-md transition-all shadow-sm shadow-primary/20 active:scale-95 border-none"
+                                            >
+                                                {isPaying ? 'Processing...' : 'Pay'}
+                                            </button>
                                         )}
                                     </div>
                                 </div>
-
-                                <button
-                                    type="button"
-                                    disabled={isDisabled}
-                                    onClick={() => onPay(debt)}
-                                    className={`w-full flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-widest py-2.5 rounded-lg transition-colors ${isDisabled
-                                            ? 'bg-secondary/10 text-secondary/50 cursor-not-allowed border border-transparent'
-                                            : 'bg-white border border-secondary/20 text-primary hover:bg-red-50 hover:text-red-500 shadow-sm'
-                                        }`}
-                                >
-                                    {isDisabled ? (
-                                        <>
-                                            <Clock size={14} className="animate-pulse" />
-                                            Pending
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CreditCard size={14} />
-                                            Pay Now
-                                        </>
-                                    )}
-                                </button>
                             </div>
                         );
                     })}
                 </div>
             )}
+            <style>{`
+                .custom-scrollbar-gray::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar-gray::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar-gray::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+            `}</style>
         </div>
     );
 };

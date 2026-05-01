@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
+import { useData } from '../DataContext';
 import ExpenseForm from '../components/ExpenseForm';
 import DebtList from '../components/DebtList';
 import { 
@@ -41,6 +42,7 @@ const GroupDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { user: currentUser } = useAuth();
+    const { refreshAllData } = useData();
 
     const [group, setGroup] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -90,6 +92,7 @@ const GroupDetails: React.FC = () => {
             await api.patch(`/settlements/${reqId}/confirm`);
             showToast("Payment request confirmed!");
             fetchGroupDetails();
+            refreshAllData();
         } catch (err) {
             showToast("Error confirming payment.", "error");
         }
@@ -100,6 +103,7 @@ const GroupDetails: React.FC = () => {
             await api.patch(`/settlements/${reqId}/reject`);
             showToast("Payment request rejected.", "error");
             fetchGroupDetails();
+            refreshAllData();
         } catch (err) {
             showToast("Error rejecting payment.", "error");
         }
@@ -420,6 +424,7 @@ const GroupDetails: React.FC = () => {
                     onSuccess={() => { 
                         setShowExpenseModal(false); 
                         fetchGroupDetails(); 
+                        refreshAllData();
                     }}
                 />
             )}

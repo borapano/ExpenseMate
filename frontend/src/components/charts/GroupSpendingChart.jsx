@@ -42,32 +42,26 @@ const GroupSpendingChart = ({ data }) => {
     "#EFD2B0",
   ];
 
-  if (safeData.length === 0) {
-    return (
-      <div className="h-[220px] flex items-center justify-center text-secondary/30 text-xs font-semibold">
-        No group spending data yet
-      </div>
-    );
-  }
+  const isDataEmpty = safeData.length === 0 || safeData.every(d => (d.value || 0) === 0);
+  const chartData = isDataEmpty ? [{ name: 'Empty', value: 1 }] : safeData;
 
   return (
     <ResponsiveContainer width="100%" height={220}>
       <PieChart>
         <Pie
-          data={safeData}
+          data={chartData}
           cx="50%"
           cy="50%"
           innerRadius={55}
           outerRadius={85}
           dataKey="value"
-          activeIndex={activeIndex}
-          activeShape={renderActiveShape}
-          onMouseEnter={(_, index) => setActiveIndex(index)}
+          activeIndex={isDataEmpty ? -1 : activeIndex}
+          activeShape={isDataEmpty ? null : renderActiveShape}
+          onMouseEnter={isDataEmpty ? null : (_, index) => setActiveIndex(index)}
+          stroke="none"
         >
-          {safeData.map((entry, index) => {
-            // Përdorim groupPalette dhe nisim nga index 0 (ngjyra Navy)
-            // Modulo (%) garanton që kodi nuk thyhet nëse ka më shumë se 6 grupe
-            const fillColor = groupPalette[index % groupPalette.length];
+          {chartData.map((entry, index) => {
+            const fillColor = isDataEmpty ? "#E5E7EB" : groupPalette[index % groupPalette.length];
 
             return (
               <Cell

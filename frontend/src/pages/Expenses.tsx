@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import api from '../api';
+import { useData } from '../DataContext';
 import {
     LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut,
     Bell, ShieldCheck, AlertCircle
@@ -13,6 +14,7 @@ import ToPayCard from '../components/Expenses/ToPayCard';
 import PendingRequestsCard from '../components/Expenses/PendingRequestsCard';
 import DebtsToSettleCard from '../components/Expenses/DebtsToSettleCard';
 import ExpenseHistoryCard from '../components/Expenses/ExpenseHistoryCard';
+import { calculateExpenseStatus } from '../utils/expenseStatus';
 
 const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to: string }) => (
     <NavLink
@@ -32,20 +34,23 @@ const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to
 
 const Expenses: React.FC = () => {
     const { user, logout } = useAuth();
-    const [loading, setLoading] = useState(true);
-    const [expenses, setExpenses] = useState<any[]>([]);
-    const [pendingRequests, setPendingRequests] = useState<any[]>([]);
-    const [pendingDebts, setPendingDebts] = useState<any[]>([]);
-    const [expectedPayments, setExpectedPayments] = useState<any[]>([]);
-
+    const { 
+        expenses, 
+        setExpenses,
+        totalExpenses, 
+        setTotalExpenses,
+        groups, 
+        settlementDashboard, 
+        loading, 
+        refreshAllData 
+    } = useData();
+    
     // UI states
     const [searchQuery, setSearchQuery] = useState("");
-    const [groups, setGroups] = useState<any[]>([]);
     const [selectedGroup, setSelectedGroup] = useState<{ id: string | null, name: string }>({ id: null, name: "All Groups" });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     // Pagination states
-    const [totalExpenses, setTotalExpenses] = useState(0);
     const [visibleCount, setVisibleCount] = useState(5);
 
     const historyRef = useRef<HTMLDivElement | null>(null);
@@ -53,60 +58,59 @@ const Expenses: React.FC = () => {
     const [payingDebts, setPayingDebts] = useState(new Set<string>());
     const [toastMessage, setToastMessage] = useState<{ title: string, type: 'success' | 'error' } | null>(null);
 
-    const [amountToReceive, setAmountToReceive] = useState(0);
-    const [amountOwed, setAmountOwed] = useState(0);
+    const pendingRequests = settlementDashboard?.global_requests || [];
+    const pendingDebts = settlementDashboard?.global_debts || [];
+    const expectedPayments = settlementDashboard?.expected_payments || [];
 
-    // New dashboard totals
-    const [effectiveTotal, setEffectiveTotal] = useState(0);
-    const [totalPendingSent, setTotalPendingSent] = useState(0);
-    const [totalPendingReceived, setTotalPendingReceived] = useState(0);
-    const [effectiveReceiveTotal, setEffectiveReceiveTotal] = useState(0);
+    // Derived lists based on Expense-Specific logic
+    const { debtExpenses, receivableExpenses } = useMemo(() => {
+        const debts: any[] = [];
+        const receivables: any[] = [];
+
+        expenses.forEach(exp => {
+            const statusInfo = calculateExpenseStatus(exp, user?.id, pendingRequests, expectedPayments);
+            const { status, amount, isPending, isActionRequired, isWaitingForOther } = statusInfo;
+
+            // 1. Debts to Settle: 
+            // Condition: Balance < 0 OR I sent money and am waiting for confirmation (Sender)
+            if ((amount && amount < -0.01) || (isPending && isWaitingForOther)) {
+                debts.push({ ...exp, statusAmount: amount, ...statusInfo });
+            }
+
+            // 2. Receivables: 
+            // Condition: Balance > 0 OR Someone sent me money and I need to confirm (Recipient)
+            if ((amount && amount > 0.01) || (isPending && isActionRequired)) {
+                receivables.push({ ...exp, statusAmount: amount, ...statusInfo });
+            }
+        });
+
+        return { debtExpenses: debts, receivableExpenses: receivables };
+    }, [expenses, user?.id, pendingRequests, expectedPayments]);
+
+
+
+    const amountToReceive = settlementDashboard?.total_owed_to_me || 0;
+    const amountOwed = settlementDashboard?.total_gross_debt || 0;
+    const effectiveTotal = settlementDashboard?.effective_total || 0;
+    const totalPendingSent = settlementDashboard?.total_pending_sent || 0;
+    const totalPendingReceived = settlementDashboard?.total_pending_received || 0;
+    const effectiveReceiveTotal = settlementDashboard?.effective_receive_total || 0;
 
     const showToast = (title: string, type: 'success' | 'error' = 'success') => {
         setToastMessage({ title, type });
         setTimeout(() => setToastMessage(null), 3500);
     };
 
-    const fetchData = async () => {
-        try {
-            setLoading(true);
-            const [expensesRes, groupsRes, dashboardRes] = await Promise.all([
-                api.get(`/users/me/expenses?limit=5&offset=0${selectedGroup.id ? `&group_id=${selectedGroup.id}` : ''}`),
-                api.get('/groups/me'),
-                api.get('/users/me/settlement_dashboard')
-            ]);
-            setExpenses(expensesRes.data?.expenses || []);
-            setTotalExpenses(expensesRes.data?.total || 0);
-            setGroups(groupsRes.data || []);
-            setVisibleCount(5);
-
-            // Fetch from dashboard instead of groups where applicable
-            const data = dashboardRes.data;
-            setAmountToReceive(data?.total_owed_to_me || 0);
-            setAmountOwed(data?.total_gross_debt || 0);
-            
-            setPendingRequests(data?.global_requests || []);
-            setPendingDebts(data?.global_debts || []);
-            setExpectedPayments(data?.expected_payments || []);
-            
-            setEffectiveTotal(data?.effective_total || 0);
-            setTotalPendingSent(data?.total_pending_sent || 0);
-            
-            setTotalPendingReceived(data?.total_pending_received || 0);
-            setEffectiveReceiveTotal(data?.effective_receive_total || 0);
-            
-        } catch (error) {
-            showToast("Failed to load data", "error");
-        } finally {
-            setLoading(false);
-        }
-    };
+    useEffect(() => {
+        refreshAllData();
+        setVisibleCount(5);
+    }, [refreshAllData]);
 
     const handleSeeMore = async () => {
         try {
             const currentOffset = expenses.length;
             const res = await api.get(`/users/me/expenses?limit=5&offset=${currentOffset}${selectedGroup.id ? `&group_id=${selectedGroup.id}` : ''}`);
-            setExpenses(prev => [...prev, ...(res.data?.expenses || [])]);
+            setExpenses([...expenses, ...(res.data?.expenses || [])]);
             setTotalExpenses(res.data?.total || 0);
             setVisibleCount(prev => prev + 5);
         } catch (err) {
@@ -121,14 +125,14 @@ const Expenses: React.FC = () => {
     };
 
     useEffect(() => { 
-        fetchData(); 
-    }, [selectedGroup.id]);
+        refreshAllData(); 
+    }, [refreshAllData]);
 
     const handleConfirmRequest = async (id: string) => {
         try {
             await api.patch(`/settlements/${id}/confirm`);
             showToast("Settlement Confirmed!");
-            fetchData();
+            refreshAllData();
         } catch (err) { showToast("Error confirming settlement", "error"); }
     };
 
@@ -136,22 +140,23 @@ const Expenses: React.FC = () => {
         try {
             await api.patch(`/settlements/${id}/reject`);
             showToast("Settlement Rejected", "error");
-            fetchData();
+            refreshAllData();
         } catch (err) { showToast("Error rejecting settlement", "error"); }
     };
 
-    const handlePayDebt = async (debt: any) => {
-        const debtId = `${debt.group_id}-${debt.user_id}`;
+    const handlePayDebt = async (expense: any) => {
+        const debtId = `expense-${expense.id}`;
         try {
             setPayingDebts(prev => new Set(prev).add(debtId));
             const payload = {
-                amount: parseFloat(Number(debt.effective_amount ?? debt.amount).toFixed(2)),
-                group_id: debt.group_id,
-                receiver_id: debt.user_id
+                amount: Math.abs(parseFloat(Number(expense.statusAmount).toFixed(2))),
+                group_id: expense.group_id,
+                receiver_id: expense.payer_id,
+                expense_id: expense.id // Linking specifically to this expense
             };
             await api.post('/settlements/', payload);
             showToast("Payment submitted for confirmation!");
-            fetchData();
+            refreshAllData();
         } catch (err) {
             setPayingDebts(prev => {
                 const next = new Set(prev);
@@ -168,9 +173,11 @@ const Expenses: React.FC = () => {
 
     const filteredExpenses = useMemo(() => {
         return expenses.filter((e: any) => {
-            return e.description.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesSearch = e.description.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesGroup = !selectedGroup.id || e.group_id === selectedGroup.id;
+            return matchesSearch && matchesGroup;
         });
-    }, [expenses, searchQuery]);
+    }, [expenses, searchQuery, selectedGroup.id]);
 
     const hasMore = expenses.length < totalExpenses;
 
@@ -243,13 +250,12 @@ const Expenses: React.FC = () => {
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <PendingRequestsCard
-                            requests={pendingRequests}
-                            expectedPayments={expectedPayments}
+                            expenses={receivableExpenses}
                             onConfirm={handleConfirmRequest}
                             onReject={handleRejectRequest}
                         />
                         <DebtsToSettleCard
-                            debts={pendingDebts}
+                            expenses={debtExpenses}
                             payingDebts={payingDebts}
                             onPay={handlePayDebt}
                         />
@@ -272,6 +278,7 @@ const Expenses: React.FC = () => {
                         user={user}
                         pendingDebts={pendingDebts}
                         pendingRequests={pendingRequests}
+                        expectedPayments={expectedPayments}
                     />
                 </div>
             </main>

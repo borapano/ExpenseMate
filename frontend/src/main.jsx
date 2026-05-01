@@ -4,6 +4,7 @@ import { BrowserRouter, useLocation } from 'react-router-dom'
 import App from './App.jsx'
 import './index.css'
 import { AuthProvider } from './AuthContext' // 1. IMPORTOAuthProvider
+import { DataProvider } from './DataContext' // 1.1 Import DataProvider
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -20,9 +21,11 @@ if (!root) throw new Error("Root element not found")
 
 ReactDOM.createRoot(root).render(
   <BrowserRouter>
-    <AuthProvider> {/* 2. RRETHO APP ME AUTHPROVIDER */}
-      <ScrollToTop />
-      <App />
+    <AuthProvider>
+      <DataProvider> {/* 2. RRETHO APP ME DATAPROVIDER */}
+        <ScrollToTop />
+        <App />
+      </DataProvider>
     </AuthProvider>
   </BrowserRouter>
 )

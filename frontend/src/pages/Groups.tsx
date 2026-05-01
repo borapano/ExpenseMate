@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { useData } from '../DataContext';
 import api from '../api';
 import { CreateGroupModal } from '../components/GroupModals';
 import {
@@ -13,10 +14,9 @@ const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to
     <NavLink
         to={to}
         className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${
-                isActive
-                    ? 'bg-secondary/20 text-accent shadow-sm'
-                    : 'text-secondary hover:bg-white/5 hover:text-white'
+            `flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${isActive
+                ? 'bg-secondary/20 text-accent shadow-sm'
+                : 'text-secondary hover:bg-white/5 hover:text-white'
             }`
         }
     >
@@ -47,40 +47,26 @@ interface GroupOut {
 }
 
 // ─── MAIN COMPONENT ─────────────────────────────────────────────────────────
+
 const Groups: React.FC = () => {
     const { user, logout } = useAuth();
+    const { groups, loading, refreshAllData } = useData();
     const navigate = useNavigate();
 
-    const [groups, setGroups] = useState<GroupOut[]>([]);
-    const [loading, setLoading] = useState(true);
-    
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [inviteCode, setInviteCode] = useState("");
     const [isJoining, setIsJoining] = useState(false);
-    
-    const [toastMessage, setToastMessage] = useState<{title: string, type: 'success'|'error'} | null>(null);
+
+    const [toastMessage, setToastMessage] = useState<{ title: string, type: 'success' | 'error' } | null>(null);
 
     const showToast = (title: string, type: 'success' | 'error' = 'success') => {
         setToastMessage({ title, type });
         setTimeout(() => setToastMessage(null), 3500);
     };
 
-    const fetchGroups = async () => {
-        try {
-            setLoading(true);
-            const res = await api.get('/groups/me');
-            setGroups(res.data || []);
-        } catch (error) {
-            console.error("Error loading groups:", error);
-            showToast("Failed to load your groups.", "error");
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
-        fetchGroups();
-    }, []);
+        refreshAllData();
+    }, [refreshAllData]);
 
     const handleJoinGroup = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -95,7 +81,7 @@ const Groups: React.FC = () => {
             await api.post('/groups/join', { invite_code: cleanCode });
             showToast("You've successfully joined the group!");
             setInviteCode("");
-            fetchGroups(); // Refresh data explicitly
+            refreshAllData(); // Refresh data explicitly
         } catch (err: any) {
             console.error("Error joining group:", err);
             showToast(err.response?.data?.detail || "Invalid code or you're already a member.", "error");
@@ -109,12 +95,12 @@ const Groups: React.FC = () => {
             <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
                 <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0 opacity-80" />
                 <main className="flex-1 flex flex-col p-8 gap-8 animate-pulse">
-                     <div className="h-8 w-48 bg-secondary/10 rounded-xl" />
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         <div className="h-40 bg-white rounded-2xl shadow-sm" />
-                         <div className="h-40 bg-white rounded-2xl shadow-sm" />
-                     </div>
-                     <div className="h-96 bg-white rounded-2xl shadow-sm" />
+                    <div className="h-8 w-48 bg-secondary/10 rounded-xl" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="h-40 bg-white rounded-2xl shadow-sm" />
+                        <div className="h-40 bg-white rounded-2xl shadow-sm" />
+                    </div>
+                    <div className="h-96 bg-white rounded-2xl shadow-sm" />
                 </main>
             </div>
         );
@@ -124,9 +110,8 @@ const Groups: React.FC = () => {
         <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary relative">
             {/* ── TOAST ZONE ── */}
             {toastMessage && (
-                <div className={`fixed top-6 right-8 px-5 py-3 rounded-xl shadow-lg z-50 flex items-center gap-3 font-bold text-sm tracking-wide transition-all ${
-                    toastMessage.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
-                }`}>
+                <div className={`fixed top-6 right-8 px-5 py-3 rounded-xl shadow-lg z-50 flex items-center gap-3 font-bold text-sm tracking-wide transition-all ${toastMessage.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
+                    }`}>
                     {toastMessage.type === 'success' ? <ShieldCheck size={18} /> : <AlertCircle size={18} />}
                     {toastMessage.title}
                 </div>
@@ -176,12 +161,12 @@ const Groups: React.FC = () => {
                 </header>
 
                 <div className="flex-1 overflow-y-auto px-8 pb-10 space-y-8 custom-scrollbar">
-                    
+
                     {/* ── TOP SECTION: ACTION CARDS ── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        
+
                         {/* 1. Create New Group */}
-                        <div 
+                        <div
                             onClick={() => setIsCreateModalOpen(true)}
                             className="bg-primary hover:bg-primary/95 text-white rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
                         >
@@ -201,14 +186,14 @@ const Groups: React.FC = () => {
                         {/* 2. Join Group Inline */}
                         <div className="bg-white border border-secondary/10 rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden transition-all hover:bg-gray-50/50">
                             <div className="absolute -top-12 -right-12 w-32 h-32 bg-accent/5 rounded-full pointer-events-none" />
-                            
+
                             <div className="w-full">
                                 <h2 className="text-lg font-black text-primary tracking-tight flex items-center gap-2 mb-3">
                                     <Hash className="text-primary/50" size={20} /> Join a Group
                                 </h2>
-                                
+
                                 <form onSubmit={handleJoinGroup} className="flex gap-2 w-full max-w-sm relative z-10">
-                                    <input 
+                                    <input
                                         type="text"
                                         placeholder="Enter 6-char Code"
                                         maxLength={6}
@@ -216,7 +201,7 @@ const Groups: React.FC = () => {
                                         onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                                         className="flex-1 min-w-0 bg-[#F7F4F0] border border-secondary/10 rounded-xl px-4 py-2.5 text-sm font-black uppercase text-primary tracking-widest outline-none focus:border-accent transition-colors placeholder:text-secondary/30 placeholder:tracking-normal"
                                     />
-                                    <button 
+                                    <button
                                         type="submit"
                                         disabled={isJoining}
                                         className="bg-primary text-white text-xs font-bold uppercase tracking-widest px-5 py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -231,7 +216,7 @@ const Groups: React.FC = () => {
                     {/* ── MAIN GRID: GROUP CARDS ── */}
                     <div>
                         <h2 className="text-sm font-black text-secondary/70 uppercase tracking-widest mb-6 px-1">Your Active Hubs</h2>
-                        
+
                         {groups.length === 0 ? (
                             <div className="bg-white rounded-[2rem] border border-dashed border-secondary/20 p-12 flex flex-col items-center justify-center text-center">
                                 <div className="w-16 h-16 bg-surface rounded-2xl flex items-center justify-center mb-4">
@@ -241,7 +226,7 @@ const Groups: React.FC = () => {
                                 <p className="text-secondary/70 max-w-md mx-auto mb-6">
                                     You aren't a part of any expense groups. Create one to start splitting bills, or join an existing hub!
                                 </p>
-                                <button 
+                                <button
                                     onClick={() => setIsCreateModalOpen(true)}
                                     className="bg-accent text-primary px-6 py-3 rounded-xl font-bold hover:bg-accent/90 transition-colors"
                                 >
@@ -253,9 +238,9 @@ const Groups: React.FC = () => {
                                 {groups.map((group) => {
                                     const netBal = Number(group.net_balance || 0);
                                     const members = group.members || [];
-                                    
+
                                     return (
-                                        <div 
+                                        <div
                                             key={group.id}
                                             onClick={() => navigate(`/groups/${group.id}`)}
                                             className="bg-white/80 p-6 rounded-2xl shadow-sm border border-secondary/10 flex flex-col hover:scale-105 hover:bg-white hover:shadow-lg transition-all duration-300 cursor-pointer group"
@@ -315,13 +300,13 @@ const Groups: React.FC = () => {
             </main>
 
             {/* Create Group Modal */}
-            <CreateGroupModal 
-                isOpen={isCreateModalOpen} 
-                onClose={() => setIsCreateModalOpen(false)} 
+            <CreateGroupModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
                 onSuccess={() => {
                     showToast("Group created successfully!");
-                    fetchGroups();
-                }} 
+                    refreshAllData();
+                }}
             />
         </div>
     );

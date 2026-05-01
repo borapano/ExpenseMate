@@ -31,36 +31,30 @@ const renderActiveShape = (props) => {
 const CategoryPieChart = ({ data }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const safeData = Array.isArray(data) && data.length > 0 ? data : [];
-
-  // 11 Ngjyra të sinkronizuara bazuar në paletën tënde
   const chartPalette = ["#1A3263", "#224482", "#2E58A3", "#3B6CC5", "#547792", "#6B8EAB", "#82A5C4", "#9BBCCF", "#FFC570", "#FFD699", "#EFD2B0"];
 
-  if (safeData.length === 0) {
-    return (
-      <div className="h-[220px] flex items-center justify-center text-secondary/30 text-xs font-semibold">
-        No category data yet
-      </div>
-    );
-  }
+  const isDataEmpty = safeData.length === 0 || safeData.every(d => (d.value || 0) === 0);
+  const chartData = isDataEmpty ? [{ name: 'Empty', value: 1 }] : safeData;
 
   return (
     <ResponsiveContainer width="100%" height={220}>
       <PieChart>
         <Pie
-          data={safeData}
+          data={chartData}
           cx="50%"
           cy="50%"
           innerRadius={55}
           outerRadius={85}
           dataKey="value"
-          activeIndex={activeIndex}
-          activeShape={renderActiveShape}
-          onMouseEnter={(_, index) => setActiveIndex(index)}
+          activeIndex={isDataEmpty ? -1 : activeIndex}
+          activeShape={isDataEmpty ? null : renderActiveShape}
+          onMouseEnter={isDataEmpty ? null : (_, index) => setActiveIndex(index)}
+          stroke="none"
         >
-          {safeData.map((entry, index) => (
+          {chartData.map((entry, index) => (
             <Cell
               key={`cell-${index}`}
-              fill={chartPalette[index % chartPalette.length]}
+              fill={isDataEmpty ? "#E5E7EB" : chartPalette[index % chartPalette.length]}
               stroke="none"
             />
           ))}

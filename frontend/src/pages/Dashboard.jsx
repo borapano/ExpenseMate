@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
+import { useData } from '../DataContext';
 import {
     LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut, Bell, CheckCircle
 } from 'lucide-react';
@@ -17,10 +18,9 @@ const NavItem = ({ icon, label, to }) => (
     <NavLink
         to={to}
         className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${
-                isActive
-                    ? 'bg-secondary/20 text-accent shadow-sm'
-                    : 'text-secondary hover:bg-white/5 hover:text-white'
+            `flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${isActive
+                ? 'bg-secondary/20 text-accent shadow-sm'
+                : 'text-secondary hover:bg-white/5 hover:text-white'
             }`
         }
     >
@@ -36,94 +36,55 @@ const NavItem = ({ icon, label, to }) => (
 
 const Dashboard = () => {
     const { user, logout } = useAuth();
+    const {
+        groups,
+        settlementDashboard,
+        spendingHistory,
+        loading,
+        refreshAllData
+    } = useData();
     const navigate = useNavigate();
-    const [groups, setGroups] = useState([]);
+
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isJoinOpen, setIsJoinOpen] = useState(false);
-    const [loading, setLoading] = useState(true);
 
-    // States të reja për Settlements
-    const [globalDebts, setGlobalDebts] = useState([]);
-    const [globalRequests, setGlobalRequests] = useState([]);
+    // Derived states from context - Unified Source of Truth
+    const globalDebts = settlementDashboard?.global_debts || [];
+    const globalRequests = settlementDashboard?.global_requests || [];
+    const expectedPayments = settlementDashboard?.expected_payments || [];
 
-    const [stats, setStats] = useState({
-        net_balance: 0,
-        total_owed_to_you: 0,
-        total_you_owe: 0,
-        monthly_spend: 0,
-        monthly_data: []
-    });
+    const stats = useMemo(() => ({
+        net_balance: settlementDashboard?.effective_receive_total || 0, // Using effective for net display
+        total_owed_to_you: settlementDashboard?.total_owed_to_me || 0,
+        total_you_owe: settlementDashboard?.total_gross_debt || 0,
+        monthly_spend: spendingHistory.monthly_spend,
+        monthly_data: spendingHistory.monthly_data
+    }), [settlementDashboard, spendingHistory]);
 
-    const fetchData = async () => {
-        try {
-            setLoading(true);
-
-            const [groupsRes, stlRes, historyRes] = await Promise.all([
-                api.get('/groups/me'),
-                api.get('/users/me/settlement_dashboard'),
-                api.get('/users/me/spending-history')
-            ]);
-
-            const groupsData = groupsRes.data || [];
-            setGroups(groupsData);
-
-            // Setojmë listat e borxheve nga Endpoint i ri
-            setGlobalDebts(stlRes.data.global_debts || []);
-            setGlobalRequests(stlRes.data.global_requests || []);
-
-            let net = 0;
-            let owedToYou = 0;
-            let youOwe = 0;
-
-            groupsData.forEach(group => {
-                const balance = Number(group.net_balance || 0);
-                net += balance;
-                if (balance > 0) {
-                    owedToYou += balance;
-                } else if (balance < 0) {
-                    youOwe += Math.abs(balance);
-                }
-            });
-
-            setStats({
-                net_balance: net,
-                total_owed_to_you: owedToYou,
-                total_you_owe: youOwe,
-                monthly_spend: historyRes.data.monthly_spend || 0,
-                monthly_data: historyRes.data.monthly_data || []
-            });
-
-            setTimeout(() => setLoading(false), 500);
-        } catch (error) {
-            console.error("Error loading dashboard data:", error);
-            setLoading(false);
-        }
-    };
-
+    // Initial load is handled by DataContext
     useEffect(() => {
-        fetchData();
-    }, []);
+        refreshAllData();
+    }, [refreshAllData]);
 
-    // Action Handlers për Settlements
     const handleConfirmRequest = async (id) => {
         try {
             await api.patch(`/settlements/${id}/confirm`);
-            fetchData();
+            refreshAllData();
         } catch (err) {
-            alert("Gabim në konfirmim!");
+            console.error("Confirmation error", err);
         }
     };
 
     const handleRejectRequest = async (id) => {
         try {
             await api.patch(`/settlements/${id}/reject`);
-            fetchData();
+            refreshAllData();
         } catch (err) {
-            alert("Gabim në refuzim!");
+            console.error("Rejection error", err);
         }
     };
 
-    if (loading) {
+    if (loading && !settlementDashboard) {
         return (
             <div className="fixed inset-0 bg-[#F7F4F0] z-[999] flex flex-col items-center justify-center">
                 <div className="flex items-center gap-3 animate-pulse">
@@ -135,14 +96,6 @@ const Dashboard = () => {
                 <div className="mt-6 w-48 h-1 bg-secondary/10 rounded-full overflow-hidden">
                     <div className="h-full bg-accent animate-[loading_1.5s_infinite]"></div>
                 </div>
-                <style dangerouslySetInnerHTML={{
-                    __html: `
-                    @keyframes loading {
-                        0% { width: 0%; transform: translateX(-100%); }
-                        50% { width: 100%; transform: translateX(0%); }
-                        100% { width: 0%; transform: translateX(100%); }
-                    }
-                `}} />
             </div>
         );
     }
@@ -158,11 +111,11 @@ const Dashboard = () => {
                     <span className="text-2xl font-bold tracking-tight">ExpenseMate</span>
                 </div>
                 <nav className="flex-1 px-4 space-y-1 mt-4">
-                    <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard"     to="/dashboard" />
-                    <NavItem icon={<Activity size={19} />}        label="Activity Feed" to="/activity-feed" />
-                    <NavItem icon={<CreditCard size={19} />}      label="Expenses"      to="/expenses" />
-                    <NavItem icon={<Users size={19} />}           label="Groups"        to="/groups" />
-                    <NavItem icon={<Settings size={19} />}        label="Settings"      to="/settings" />
+                    <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" to="/dashboard" />
+                    <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
+                    <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
+                    <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
+                    <NavItem icon={<Settings size={19} />} label="Settings" to="/settings" />
                 </nav>
                 <div className="p-6 border-t border-white/5 mt-auto">
                     <button onClick={logout} className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full group text-sm font-bold uppercase tracking-widest">
@@ -190,12 +143,10 @@ const Dashboard = () => {
                 </header>
 
                 <div className="flex-1 overflow-y-auto px-8 pb-10">
-                    {/* Rreshti i Parë: Net Balance dhe Grafiku */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10 items-start">
                         <div className="lg:col-span-4">
-                            <NetBalanceCard data={{ net_balance: stats.net_balance }} />
+                            <NetBalanceCard data={{ net_balance: settlementDashboard?.effective_total || 0 }} />
                         </div>
-
                         <div className="lg:col-span-8">
                             <MonthlyGraphCard data={{
                                 monthly_spend: stats.monthly_spend,
@@ -204,7 +155,6 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    {/* Rreshti i Dytë: Grupet dhe Action Center */}
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
                         <div className="lg:col-span-3">
                             <div className="flex items-center justify-between mb-8 px-2 h-[32px]">
@@ -235,24 +185,25 @@ const Dashboard = () => {
                                     }}
                                 />
 
-                                {/* ---------------- ✅ SEKSIONI I RI I BORXHEVE ---------------- */}
-
-                                {/* Kërkesat në Pritje (Të tjerët të kanë dërguar lekë) */}
+                                {/* ─── ACTION CENTER: INCOMING REQUESTS ─── */}
                                 {globalRequests.length > 0 && (
                                     <div className="bg-emerald-50/50 p-6 rounded-[2.5rem] shadow-sm border border-emerald-100/50">
                                         <h4 className="text-xs font-black uppercase tracking-widest text-emerald-800 mb-4 flex items-center gap-2">
-                                            <CheckCircle size={14} /> Konfirmo Pagesat
+                                            <CheckCircle size={14} /> To Verify
                                         </h4>
                                         <div className="space-y-3">
                                             {globalRequests.map(req => (
                                                 <div key={req.id} className="bg-white p-4 rounded-[1.5rem] flex flex-col gap-3 shadow-sm border border-emerald-50">
-                                                    <div>
-                                                        <p className="font-bold text-primary text-sm">{req.sender_name}</p>
-                                                        <p className="text-xs text-secondary/80">Të ka dërguar <span className="font-black text-emerald-600">{req.amount}€</span></p>
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <p className="font-bold text-primary text-sm">{req.sender_name}</p>
+                                                            <p className="text-[10px] text-secondary/60 uppercase font-bold">{req.group_name}</p>
+                                                        </div>
+                                                        <p className="font-black text-emerald-600">€{req.amount}</p>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button onClick={() => handleConfirmRequest(req.id)} className="flex-1 bg-emerald-500 text-white text-[11px] uppercase tracking-wider font-bold py-2 rounded-xl hover:bg-emerald-600 transition-colors">Konfirmo</button>
-                                                        <button onClick={() => handleRejectRequest(req.id)} className="flex-1 bg-red-500 text-white text-[11px] uppercase tracking-wider font-bold py-2 rounded-xl hover:bg-red-600 transition-colors">Refuzo</button>
+                                                        <button onClick={() => handleConfirmRequest(req.id)} className="flex-1 bg-primary text-white text-[11px] uppercase tracking-wider font-bold py-2 rounded-xl hover:bg-primary/90 transition-all">Confirm</button>
+                                                        <button onClick={() => handleRejectRequest(req.id)} className="flex-1 bg-white border border-secondary/20 text-secondary text-[11px] uppercase tracking-wider font-bold py-2 rounded-xl hover:bg-gray-50 transition-all">Reject</button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -260,21 +211,38 @@ const Dashboard = () => {
                                     </div>
                                 )}
 
-                                {/* Borxhet Globale (Ti u detyrohesh të tjerëve) */}
-                                {globalDebts.length > 0 && (
+                                {/* ─── ACTION CENTER: DEBTS & PENDING ─── */}
+                                {(globalDebts.length > 0 || expectedPayments.length > 0) && (
                                     <div className="bg-red-50/50 p-6 rounded-[2.5rem] shadow-sm border border-red-100/50 mt-6">
                                         <h4 className="text-xs font-black uppercase tracking-widest text-red-800 mb-4 flex items-center gap-2">
-                                            <CreditCard size={14} /> Borxhet e Mia
+                                            <CreditCard size={14} /> Debts to Settle
                                         </h4>
                                         <div className="space-y-3">
+                                            {/* To Pay */}
                                             {globalDebts.map(debt => (
-                                                <div key={`${debt.group_id}-${debt.user_id}`} className="bg-white p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-red-50">
+                                                <div key={`debt-${debt.group_id}-${debt.user_id}`} className="bg-white p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-red-50">
                                                     <div>
                                                         <p className="font-bold text-primary text-sm">{debt.user_name}</p>
-                                                        <p className="text-xs text-secondary/80">Në: {debt.group_name}</p>
+                                                        <p className="text-[10px] text-secondary/60 uppercase font-bold">{debt.group_name}</p>
                                                     </div>
                                                     <div className="text-right">
-                                                        <p className="font-black text-red-600">{debt.amount}€</p>
+                                                        <p className="font-black text-red-600">-€{debt.effective_amount || debt.amount}</p>
+                                                        <p className="text-[9px] font-bold text-red-400 uppercase tracking-tighter">To Pay</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {/* Awaiting Confirmation */}
+                                            {expectedPayments.map(exp => (
+                                                <div key={`exp-${exp.group_id}-${exp.user_id}`} className="bg-amber-50/50 p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-amber-100/50">
+                                                    <div>
+                                                        <p className="font-bold text-amber-900 text-sm">{exp.user_name}</p>
+                                                        <p className="text-[10px] text-amber-700/60 uppercase font-bold">{exp.group_name}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-black text-amber-600">-€{exp.amount}</p>
+                                                        <p className="text-[9px] font-bold text-amber-500 uppercase tracking-tighter flex items-center gap-1 justify-end">
+                                                            <Clock size={10} /> Awaiting Confirmation
+                                                        </p>
                                                     </div>
                                                 </div>
                                             ))}
@@ -282,23 +250,20 @@ const Dashboard = () => {
                                     </div>
                                 )}
 
-                                {/* Nëse s'ka borxhe ose kërkesa, shfaqim një mesazh pozitiv */}
-                                {globalRequests.length === 0 && globalDebts.length === 0 && (
+                                {/* S'ka asgjë */}
+                                {globalRequests.length === 0 && globalDebts.length === 0 && expectedPayments.length === 0 && (
                                     <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-secondary/5 text-center py-10 opacity-60">
-                                        <p className="text-secondary/40 text-[10px] font-bold uppercase tracking-[0.2em]">Të gjitha borxhet janë të shlyera</p>
+                                        <p className="text-secondary/40 text-[10px] font-bold uppercase tracking-[0.2em]">All settled up</p>
                                     </div>
                                 )}
-
-                                {/* ----------------------------------------------------------------- */}
-
                             </div>
                         </div>
                     </div>
                 </div>
             </main>
 
-            <CreateGroupModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSuccess={fetchData} />
-            <JoinGroupModal isOpen={isJoinOpen} onClose={() => setIsJoinOpen(false)} onSuccess={fetchData} />
+            <CreateGroupModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onSuccess={refreshAllData} />
+            <JoinGroupModal isOpen={isJoinOpen} onClose={() => setIsJoinOpen(false)} onSuccess={refreshAllData} />
         </div>
     );
 };

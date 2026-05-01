@@ -47,8 +47,19 @@ const MonthlyComparisonChart = ({ data }) => {
         // Shkurtojmë emrin e gjatë që të zërë më pak hapësirë
         category: item.category === "Bills & Subscriptions" ? "Bills" : item.category
       }))
-      // Renditim sipas shpenzimeve të këtij muaji (nga më i larti te më i ulëti)
-      .sort((a, b) => (b.thisMonth || 0) - (a.thisMonth || 0));
+      // Renditja Hibride:
+      // 1. Kategoritë me shpenzime këtë muaj (nga më i larti te më i ulëti)
+      // 2. Kategoritë me €0 këtë muaj, të renditura sipas muajit të kaluar (nga më i larti te më i ulëti)
+      .sort((a, b) => {
+        const aThis = a.thisMonth || 0;
+        const bThis = b.thisMonth || 0;
+
+        if (aThis > 0 && bThis > 0) return bThis - aThis;
+        if (aThis > 0 && bThis === 0) return -1;
+        if (aThis === 0 && bThis > 0) return 1;
+
+        return (b.lastMonth || 0) - (a.lastMonth || 0);
+      });
   }, [data]);
 
   if (processedData.length === 0) {
