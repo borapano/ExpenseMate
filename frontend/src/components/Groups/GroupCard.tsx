@@ -14,7 +14,6 @@ interface GroupCardProps {
         name: string;
         description: string;
         code: string;
-        total_spending?: number;
         net_balance?: number;
         members?: GroupParticipant[];
         creator_id?: string;
@@ -106,8 +105,8 @@ const GroupCard: React.FC<GroupCardProps> = ({ group }) => {
                             </div>
                         ))}
                         {members.length > 5 && (
-                            <div className="w-7 h-7 rounded-full border-2 border-white bg-primary text-white flex items-center justify-center text-[9px] font-black shadow-sm">
-                                +{members.length - 5}
+                            <div className="w-7 h-7 rounded-full border-2 border-white bg-primary/10 flex items-center justify-center text-[9px] font-black text-primary/40 shadow-sm tracking-tighter">
+                                ...
                             </div>
                         )}
                     </div>
@@ -117,7 +116,7 @@ const GroupCard: React.FC<GroupCardProps> = ({ group }) => {
                 </div>
 
                 {/* Row 4: Balance footer */}
-                <div className="pt-3 border-t border-secondary/8 flex items-center justify-between mt-auto">
+                <div className="pt-3 border-t border-secondary/10 flex items-center justify-between mt-auto">
                     <div>
                         <span className="text-[8px] font-black uppercase text-secondary/40 tracking-wider block">
                             Your Balance

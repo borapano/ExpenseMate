@@ -25,27 +25,20 @@ logger = logging.getLogger(__name__)
 
 
 # --- LIFESPAN (replaces on_event startup) ---
-# Running create_all inside lifespan prevents blocking Uvicorn workers
-# if Neon is in a cold-start state when the server boots.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: run table sync in a thread pool so the event loop is not blocked
     try:
         await asyncio.to_thread(models.Base.metadata.create_all, engine)
         logger.info("✅ Database schema synced successfully.")
     except Exception as e:
         logger.error(f"❌ Database sync error: {e}")
     yield
-    # Shutdown: nothing to clean up (connection pool is handled by SQLAlchemy)
     logger.info("🛑 Server shutting down.")
 
 
 app = FastAPI(title="ExpenseMate API", version="2.0.0", lifespan=lifespan)
 
 # --- CORS ---
-# IMPORTANT: allow_origins=["*"] is spec-invalid when allow_credentials=True.
-# Browsers silently reject credentialed requests to wildcard origins.
-# List exact origins instead.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -86,15 +79,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 def format_expense(expense, current_user_id=None):
     try:
-        # Calculate specific balance if user_id is provided
         user_balance = None
         transaction_status = "NONE"
-        
+
         if current_user_id:
             user_id_str = str(current_user_id)
             is_payer = (str(expense.payer_id) == user_id_str)
-            
-            # Balance
+
             if is_payer:
                 user_balance = sum(
                     float(p.share_amount) for p in getattr(expense, "participants", [])
@@ -106,13 +97,7 @@ def format_expense(expense, current_user_id=None):
                     user_balance = 0.0 if getattr(my_p, "is_settled", False) else -float(getattr(my_p, "share_amount", 0.0))
                 else:
                     user_balance = 0.0
-            
-            # Pending checks for this specific expense
-            # Since settlement model has expense_id, check relationships if available
-            # Note: We need a direct query or mapped property. We'll add this dynamically if needed
-            # For now, rely on frontend or global pending arrays. Let's see if we can get it from DB.
-            # We will handle the transaction status in get_my_expenses where we have DB session.
-            
+
         res = {
             "id": str(expense.id) if getattr(expense, "id", None) else "",
             "group_id": str(expense.group_id) if getattr(expense, "group_id", None) else "",
@@ -134,11 +119,11 @@ def format_expense(expense, current_user_id=None):
                 for p in getattr(expense, "participants", [])
             ]
         }
-        
+
         if current_user_id:
             res["user_balance"] = user_balance
             res["transaction_status"] = transaction_status
-            
+
         return res
     except Exception as e:
         logger.error(f"Error formatting expense {getattr(expense, 'id', 'unknown')}: {e}")
@@ -215,14 +200,10 @@ def get_my_expenses(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    # 1. Fetch real expenses total (excluding settlements) for "Total Expenses" logic.
     _, total_expenses_count = crud.get_user_expenses(
         db, current_user.id, limit=1, offset=0, group_id=group_id
     )
 
-    # 2. Fetch all individual shares involving the user (Debts & Credits)
-    # We fetch where the user is either the debtor or the payer.
-    # Exclude where user is BOTH payer and debtor (their own share).
     shares_query = db.query(models.ExpenseParticipant, models.Expense).join(
         models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id
     ).filter(
@@ -243,8 +224,6 @@ def get_my_expenses(
     expense_ids = list({exp.id for _, exp in shares})
     group_ids = list({exp.group_id for _, exp in shares})
 
-    # specific_pending_map: key = (str(expense_id), str(sender_id))
-    # Kap vetem settlements PENDING brenda 7 diteve — pas 7 ditesh trajtohen si te skaduara
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     specific_pending_map = {}
     if expense_ids:
@@ -255,8 +234,7 @@ def get_my_expenses(
         ).all():
             specific_pending_map[(str(s.expense_id), str(s.sender_id))] = s
 
-    # Fetch ALL participants for each expense (for the participants column)
-    all_participants_map = {}  # expense_id -> list of all ExpenseParticipant + User
+    all_participants_map = {}
     if expense_ids:
         all_eps = db.query(models.ExpenseParticipant).options(
             joinedload(models.ExpenseParticipant.user)
@@ -269,8 +247,6 @@ def get_my_expenses(
                 all_participants_map[eid] = []
             all_participants_map[eid].append(ep)
 
-    # Group shares by expense_id
-    # Key: expense_id → {exp, shares: [ep, ...]}
     expenses_map = {}
     for ep, exp in shares:
         eid = str(exp.id)
@@ -282,17 +258,15 @@ def get_my_expenses(
 
     for eid, data in expenses_map.items():
         exp = data["exp"]
-        participants = data["shares"]  # shares that involve current_user
+        participants = data["shares"]
         current_user_str = str(current_user.id)
 
-        # Determine if current_user is payer (creditor) or debtor
         is_payer = str(exp.payer_id) == current_user_str
 
         if is_payer:
-            # TI je payer — llogarit balancën agregate nga të gjithë debtor-ët
-            to_be_paid = 0.0     # aktive, pa paguar
-            waiting = 0.0        # ka dërguar settlement PENDING
-            all_issued = True    # true nëse të gjithë janë settled
+            to_be_paid = 0.0
+            waiting = 0.0
+            all_issued = True
 
             for ep in participants:
                 ep_user_str = str(ep.user_id)
@@ -300,7 +274,7 @@ def get_my_expenses(
                 specific = specific_pending_map.get((eid, ep_user_str))
 
                 if ep.is_settled:
-                    pass  # issued, nuk ndikon në balancë
+                    pass
                 elif specific:
                     waiting += amount
                     all_issued = False
@@ -308,7 +282,6 @@ def get_my_expenses(
                     to_be_paid += amount
                     all_issued = False
 
-            # Aggregate status
             if all_issued:
                 agg_status = "CONFIRMED"
                 user_balance = 0.0
@@ -331,8 +304,7 @@ def get_my_expenses(
                 waiting_out = 0.0
 
         else:
-            # TI je debtor — shiko statusin tënd
-            ep = participants[0]  # vetëm share-ja jote
+            ep = participants[0]
             amount = float(ep.share_amount)
             specific = specific_pending_map.get((eid, current_user_str))
             to_be_paid_out = 0.0
@@ -348,22 +320,17 @@ def get_my_expenses(
                 agg_status = "NONE"
                 user_balance = -amount
 
-        # Build participants list for modal (ALL participants including payer if has share)
         all_eps_for_expense = all_participants_map.get(eid, [])
-        
-        # Check if payer has a share in this expense
+
         payer_id_str = str(exp.payer_id) if exp.payer_id else ""
         payer_has_share = any(str(ep.user_id) == payer_id_str for ep in all_eps_for_expense)
-        
-        # my_share: the current user's share amount in this expense (0 if not participant)
+
         my_share_ep = next((ep for ep in all_eps_for_expense if str(ep.user_id) == current_user_str), None)
         my_share = float(my_share_ep.share_amount) if my_share_ep else 0.0
 
         def get_participant_status(ep_item):
             ep_uid = str(ep_item.user_id)
-            # Status is shown only if this participant has a direct relationship with current_user
             if is_payer:
-                # I am payer — show status for all (they all owe me)
                 if ep_item.is_settled:
                     return "CONFIRMED"
                 s = specific_pending_map.get((eid, ep_uid))
@@ -371,7 +338,6 @@ def get_my_expenses(
                     return "PENDING"
                 return "NONE"
             else:
-                # I am debtor — show status only for myself
                 if ep_uid == current_user_str:
                     if ep_item.is_settled:
                         return "CONFIRMED"
@@ -380,7 +346,7 @@ def get_my_expenses(
                         return "PENDING"
                     return "NONE"
                 else:
-                    return None  # No status for other participants
+                    return None
 
         participants_list = sorted([
             {
@@ -395,7 +361,6 @@ def get_my_expenses(
             for ep in all_eps_for_expense
         ], key=lambda x: x["user_name"])
 
-        # Add payer as entry if payer has NO share (paid only for others)
         if not payer_has_share and exp.payer:
             participants_list.insert(0, {
                 "user_id": payer_id_str,
@@ -404,10 +369,9 @@ def get_my_expenses(
                 "is_settled": True,
                 "is_payer": True,
                 "is_me": payer_id_str == current_user_str,
-                "status": "PAYER"  # special tag — paid but has no share
+                "status": "PAYER"
             })
 
-        # Preview: first 2 names alphabetically (exclude payer-only entry)
         preview_names = [p["user_name"] for p in participants_list if not (p["is_payer"] and p["amount"] == 0.0)][:2]
 
         f = {
@@ -435,13 +399,10 @@ def get_my_expenses(
 
         formatted_items.append(f)
 
-    # Sort all items chronologically (newest first)
     formatted_items.sort(key=lambda x: x["created_date"] or x["expense_date"], reverse=True)
-
     paginated_items = formatted_items[offset:offset+limit]
 
     return {"expenses": paginated_items, "total": len(formatted_items)}
-
 
 
 # --- GROUPS ---
@@ -453,10 +414,8 @@ def create_group(group: schemas.GroupCreate, db: Session = Depends(get_db), curr
 
 @app.get("/groups/me")
 def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # crud.get_user_groups now eagerly loads members+users in one query
     groups = crud.get_user_groups(db, current_user.id)
 
-    # Bulk total expenses per group in ONE query
     group_ids = [g.id for g in groups]
     totals_rows = (
         db.query(models.Expense.group_id, func.sum(models.Expense.amount).label("total"))
@@ -490,9 +449,19 @@ def my_groups(db: Session = Depends(get_db), current_user: models.User = Depends
     return result
 
 
+# ── Validate invite code (must be before /groups/{group_id}) ──────────────────
+@app.get("/groups/validate/{code}")
+def validate_group_code(
+    code: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    group = db.query(models.Group).filter(models.Group.code == code.upper()).first()
+    return {"exists": group is not None}
+
+
 @app.get("/groups/{group_id}")
 def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # Single query: group + members + member users + expenses + participants + payer
     group = (
         db.query(models.Group)
         .options(
@@ -520,8 +489,6 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
     seven_days_ago = now_utc - timedelta(days=7)
     other_member_ids = [m.user_id for m in group.members if m.user_id != current_user.id]
 
-    # ── Bulk debt query: one pass for ALL members ──────────────────────────────
-    # "i_owe[member]" = sum of my shares on expenses THEY paid
     i_owe_rows = (
         db.query(
             models.Expense.payer_id.label("other_user_id"),
@@ -539,7 +506,6 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
     )
     i_owe_map = {str(row.other_user_id): float(row.total) for row in i_owe_rows}
 
-    # "owed_to_me[member]" = sum of their shares on expenses I paid
     owed_to_me_rows = (
         db.query(
             models.ExpenseParticipant.user_id.label("other_user_id"),
@@ -557,7 +523,6 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
     )
     owed_to_me_map = {str(row.other_user_id): float(row.total) for row in owed_to_me_rows}
 
-    # ── Bulk pending-settlement check: one query for ALL members ──────────────
     pending_sent_rows = (
         db.query(models.Settlement.receiver_id)
         .filter(
@@ -571,7 +536,6 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
     )
     pending_sent_ids = {str(row.receiver_id) for row in pending_sent_rows}
 
-    # Build my_debts list
     member_map = {m.user_id: m.user for m in group.members}
     my_debts = []
     for uid in other_member_ids:
@@ -585,7 +549,6 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
                 "is_pending": uid_str in pending_sent_ids,
             })
 
-    # ── Incoming pending settlements (others paying me) ────────────────────────
     pending_requests = (
         db.query(models.Settlement)
         .options(joinedload(models.Settlement.sender))
@@ -659,11 +622,9 @@ def create_settlement(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    # Security: prevent a user from settling a debt with themselves
     if str(settlement.receiver_id) == str(current_user.id):
         raise HTTPException(status_code=400, detail="SELF_SETTLEMENT_NOT_ALLOWED")
 
-    # Idempotency: prevent duplicate PENDING settlements for the same expense
     existing = db.query(models.Settlement).filter(
         models.Settlement.sender_id == current_user.id,
         models.Settlement.receiver_id == settlement.receiver_id,
@@ -718,17 +679,16 @@ def reject_settlement(settlement_id: UUID, db: Session = Depends(get_db), curren
 def get_global_settlements(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     my_groups = crud.get_user_groups(db, current_user.id)
     group_ids = [g.id for g in my_groups]
-    
+
     if not group_ids:
         return {
-            "payables": [], 
-            "receivables": [], 
+            "payables": [],
+            "receivables": [],
             "pending_settlements_received": [],
-            "total_to_pay": 0.0, 
+            "total_to_pay": 0.0,
             "total_to_receive": 0.0
         }
 
-    # 1. PENDING SETTLEMENTS (Incoming / Received) — brenda 7 diteve
     now_utc = datetime.now(timezone.utc)
     seven_days_ago_global = now_utc - timedelta(days=7)
     pending_received = db.query(models.Settlement).options(
@@ -740,7 +700,7 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
         models.Settlement.status == "PENDING",
         models.Settlement.created_at >= seven_days_ago_global
     ).all()
-    
+
     pending_received_list = [{
         "id": str(s.id),
         "sender_id": str(s.sender_id),
@@ -752,23 +712,19 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
         "created_at": s.created_at.isoformat() if s.created_at else None
     } for s in pending_received]
 
-    # 2. PENDING SETTLEMENTS (Outgoing / Sent) — brenda 7 diteve
     pending_sent = db.query(models.Settlement).filter(
         models.Settlement.sender_id == current_user.id,
         models.Settlement.status == "PENDING",
         models.Settlement.created_at >= seven_days_ago_global
     ).all()
-    
-    # Create a fast lookup for pending sent amounts per pair (group, receiver)
+
     pending_sent_map = {}
     for s in pending_sent:
         key = (str(s.group_id), str(s.receiver_id))
         pending_sent_map[key] = pending_sent_map.get(key, 0.0) + float(s.amount)
 
-    # 3. PAYABLES (Debts to Settle: I owe money)
-    # user_id == current_user AND is_settled == False AND Expense.payer_id != current_user
     payables_query = db.query(
-        models.ExpenseParticipant, 
+        models.ExpenseParticipant,
         models.Expense
     ).join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id).filter(
         models.ExpenseParticipant.user_id == current_user.id,
@@ -795,10 +751,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
     for ep, exp in payables_query:
         amount = float(ep.share_amount)
         total_to_pay += amount
-        
-        # Check ONLY specific settlement (linked to this exact expense)
-        # Global pending check removed — it caused false positives when
-        # multiple debts exist with the same payer in the same group.
         is_pending = specific_pending_map.get(exp.id, False)
 
         payables.append({
@@ -815,11 +767,8 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
             "created_date": exp.created_date.isoformat() if exp.created_date else None
         })
 
-    # Sort payables: active first, then pending, then by date desc
     payables.sort(key=lambda x: (1 if x["is_pending"] else 0, x["created_date"] or ""), reverse=True)
 
-    # 4. RECEIVABLES (Active Credits: Money owed to me)
-    # Expense.payer_id == current_user AND user_id != current_user AND is_settled == False
     receivables_query = db.query(
         models.ExpenseParticipant,
         models.Expense
@@ -852,7 +801,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
             "created_date": exp.created_date.isoformat() if exp.created_date else None
         })
 
-    # Sort receivables by date desc
     receivables.sort(key=lambda x: x["created_date"] or "", reverse=True)
 
     total_pending_sent = sum(pending_sent_map.values())
@@ -869,7 +817,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
         "total_pending_sent": round(total_pending_sent, 2),
         "total_pending_received": round(total_pending_received, 2)
     }
-
 
 
 if __name__ == "__main__":

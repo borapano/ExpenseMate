@@ -6,7 +6,7 @@ import api from '../api';
 import { CreateGroupModal } from '../components/GroupModals';
 import {
     LayoutDashboard, Activity, CreditCard, Users, LogOut,
-    ShieldCheck, AlertCircle
+    ShieldCheck, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 import CreateGroupCard from '../components/Groups/CreateGroupCard';
@@ -43,6 +43,12 @@ const Groups: React.FC = () => {
     const [inviteCode, setInviteCode] = useState("");
     const [isJoining, setIsJoining] = useState(false);
     const [toastMessage, setToastMessage] = useState<{ title: string, type: 'success' | 'error' } | null>(null);
+    const [visibleCount, setVisibleCount] = useState(6);
+
+    const STEP = 6;
+    const visibleGroups = groups.slice(0, visibleCount);
+    const hasMore = visibleCount < groups.length;
+    const allShown = visibleCount >= groups.length && groups.length > STEP;
 
     const showToast = (title: string, type: 'success' | 'error' = 'success') => {
         setToastMessage({ title, type });
@@ -55,21 +61,15 @@ const Groups: React.FC = () => {
 
     const handleJoinGroup = async (e: React.FormEvent) => {
         e.preventDefault();
-        const cleanCode = inviteCode.trim().toUpperCase();
-        if (cleanCode.length !== 6) {
-            showToast("Invite code must be exactly 6 characters.", "error");
-            return;
-        }
-
         setIsJoining(true);
         try {
-            await api.post('/groups/join', { invite_code: cleanCode });
+            await api.post('/groups/join', { invite_code: inviteCode.trim().toUpperCase() });
             showToast("You've successfully joined the group!");
             setInviteCode("");
             refreshAllData();
         } catch (err: any) {
             console.error("Error joining group:", err);
-            showToast(err.response?.data?.detail || "Invalid code or you're already a member.", "error");
+            showToast(err.response?.data?.detail || "Something went wrong. Please try again.", "error");
         } finally {
             setIsJoining(false);
         }
@@ -155,12 +155,20 @@ const Groups: React.FC = () => {
                             setInviteCode={setInviteCode}
                             onJoin={handleJoinGroup}
                             isJoining={isJoining}
+                            userGroups={groups.map(g => ({ code: g.code, name: g.name }))}
                         />
                     </div>
 
                     {/* ── MAIN GRID: GROUP CARDS ── */}
                     <div>
-                        <h2 className="text-sm font-black text-secondary/70 uppercase tracking-widest mb-6 px-1">Your Groups</h2>
+                        {groups.length > 0 && (
+                            <div className="flex items-baseline gap-3 mb-6 px-1">
+                                <h2 className="text-sm font-black text-secondary/70 uppercase tracking-widest">Your Groups</h2>
+                                <span className="text-[11px] font-semibold text-secondary/40">
+                                    You are part of {groups.length} {groups.length === 1 ? 'group' : 'groups'}
+                                </span>
+                            </div>
+                        )}
 
                         {groups.length === 0 ? (
                             <div className="bg-white rounded-[2rem] border border-dashed border-secondary/20 p-12 flex flex-col items-center justify-center text-center">
@@ -179,11 +187,33 @@ const Groups: React.FC = () => {
                                 </button>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {groups.map((group) => (
-                                    <GroupCard key={group.id} group={group} />
-                                ))}
-                            </div>
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {visibleGroups.map((group) => (
+                                        <GroupCard key={group.id} group={group} />
+                                    ))}
+                                </div>
+
+                                {(hasMore || allShown) && (
+                                    <div className="mt-6 flex justify-center">
+                                        {hasMore ? (
+                                            <button
+                                                onClick={() => setVisibleCount(v => v + STEP)}
+                                                className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm"
+                                            >
+                                                See More <ChevronDown size={14} strokeWidth={3} />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => setVisibleCount(STEP)}
+                                                className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm"
+                                            >
+                                                See Less <ChevronUp size={14} strokeWidth={3} />
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>

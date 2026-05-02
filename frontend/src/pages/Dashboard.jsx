@@ -10,8 +10,8 @@ import {
 import NetBalanceCard from '../components/NetBalanceCard';
 import FinancialHealthCard from '../components/FinancialHealthCard';
 import MonthlyGraphCard from '../components/MonthlyGraphCard';
-import GroupCard from '../components/GroupCard';
-import CreateGroupCard from '../components/CreateGroupCard';
+import GroupCard from '../components/Groups/GroupCard';
+import CreateGroupCard from '../components/Groups/CreateGroupCard';
 import { CreateGroupModal, JoinGroupModal } from '../components/GroupModals';
 
 const NavItem = ({ icon, label, to }) => (
