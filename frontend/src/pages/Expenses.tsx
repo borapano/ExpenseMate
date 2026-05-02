@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import api from '../api';
 import { useData } from '../DataContext';
@@ -61,6 +61,7 @@ const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 const Expenses: React.FC = () => {
+    const navigate = useNavigate();
     const { user, logout } = useAuth();
     const {
         expenses,
@@ -72,6 +73,7 @@ const Expenses: React.FC = () => {
         loading,
         refreshAllData,
     } = useData();
+    const recentGroups = [...(groups || [])].sort((a, b) => Number(b.id) - Number(a.id));
 
     // ── UI state ──────────────────────────────────────────────────────────
     const [searchQuery, setSearchQuery] = useState('');
@@ -255,19 +257,37 @@ const Expenses: React.FC = () => {
 
             {/* Sidebar */}
             <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0 sticky top-0 h-screen">
-                <div className="p-8 flex items-center gap-3">
+                <div className="p-8 flex items-center gap-3 shrink-0">
                     <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
                         <Users className="text-accent" size={20} />
                     </div>
                     <span className="text-2xl font-bold tracking-tight">ExpenseMate</span>
                 </div>
-                <nav className="flex-1 px-4 space-y-1 mt-4">
-                    <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" to="/dashboard" />
-                    <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
-                    <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
-                    <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
-                </nav>
-                <div className="p-6 border-t border-white/5 mt-auto">
+                <div className="flex-1 flex flex-col min-h-0 px-4 mt-4">
+                    <div className="shrink-0 space-y-1">
+                        <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" to="/dashboard" />
+                        <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
+                        <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
+                        <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
+                    </div>
+
+                    {/* Sub-items under Groups */}
+                    {recentGroups.length > 0 && (
+                        <div className="overflow-y-auto flex flex-col mt-0.5 custom-scrollbar">
+                            {recentGroups.map(group => (
+                                <button
+                                    key={group.id}
+                                    onClick={() => navigate(`/groups/${group.id}`)}
+                                    className="flex items-center pl-10 pr-3 py-1.5 rounded-xl text-left w-full transition-all duration-150 text-secondary/50 hover:bg-white/5 hover:text-white"
+                                >
+                                    <span className="text-[11px] font-semibold truncate">{group.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-6 border-t border-white/5 shrink-0">
                     <button
                         onClick={logout}
                         className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full text-sm font-bold uppercase tracking-widest"

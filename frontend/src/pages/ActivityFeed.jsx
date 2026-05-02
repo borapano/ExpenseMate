@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Component } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import api from '../api';
@@ -144,11 +144,23 @@ class ChartErrorBoundary extends Component {
 
 // ─── Nav Item ────────────────────────────────────────────────────────────────
 const NavItem = ({ icon, label, to }) => (
-  <NavLink to={to} className={({ isActive }) => `flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all ${isActive ? 'bg-secondary/20 text-accent shadow-sm' : 'text-secondary hover:bg-white/5 hover:text-white'}`}>
-    {({ isActive }) => (
-      <><div className={isActive ? 'text-accent' : 'text-secondary/60'}>{icon}</div><span className="font-bold text-sm">{label}</span>{isActive && <div className="ml-auto w-1.5 h-1.5 bg-accent rounded-full" />}</>
-    )}
-  </NavLink>
+    <NavLink
+        to={to}
+        className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-pointer transition-all duration-200 ${isActive
+                ? 'bg-secondary/20 text-accent shadow-sm'
+                : 'text-secondary hover:bg-white/5 hover:text-white'
+            }`
+        }
+    >
+        {({ isActive }) => (
+            <>
+                <div className={isActive ? 'text-accent' : 'text-secondary/60'}>{icon}</div>
+                <span className="font-bold text-sm tracking-wide">{label}</span>
+                {isActive && <div className="ml-auto w-1.5 h-1.5 bg-accent rounded-full" />}
+            </>
+        )}
+    </NavLink>
 );
 
 // ─── Chart Card ──────────────────────────────────────────────────────────────
@@ -171,8 +183,10 @@ const ChartCard = ({ title, children, legend }) => (
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 const ActivityFeed = () => {
+  const navigate = useNavigate();
   const { user, logout, refreshUser } = useAuth();
-  const { analytics, refreshAllData, loading } = useData();
+  const { analytics, groups, refreshAllData, loading } = useData();
+  const recentGroups = [...(groups || [])].sort((a, b) => Number(b.id) - Number(a.id));
 
   const stats = analytics.stats;
   const charts = analytics.charts;
@@ -195,25 +209,51 @@ const ActivityFeed = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
+    <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary relative">
       <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0 sticky top-0 h-screen">
-        <div className="p-8 flex items-center gap-3">
-          <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center"><Users className="text-accent" size={20} /></div>
-          <span className="text-2xl font-bold">ExpenseMate</span>
-        </div>
-        <nav className="flex-1 px-4 space-y-1 mt-4">
-          <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" to="/dashboard" />
-          <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
-          <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
-          <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
-        </nav>
-        <div className="p-6 border-t border-white/5 mt-auto">
-          <button onClick={logout} className="flex items-center gap-3 text-secondary hover:text-white w-full text-sm font-bold uppercase"><LogOut size={19} />Logout</button>
-        </div>
+          <div className="p-8 flex items-center gap-3 shrink-0">
+              <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
+                  <Users className="text-accent" size={20} />
+              </div>
+              <span className="text-2xl font-bold tracking-tight">ExpenseMate</span>
+          </div>
+
+          <div className="flex-1 flex flex-col min-h-0 px-4 mt-4">
+              <div className="shrink-0 space-y-1">
+                  <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" to="/dashboard" />
+                  <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
+                  <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
+                  <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
+              </div>
+
+              {recentGroups.length > 0 && (
+                  <div className="overflow-y-auto flex flex-col mt-0.5 custom-scrollbar">
+                      {recentGroups.map(group => (
+                          <button
+                              key={group.id}
+                              onClick={() => navigate(`/groups/${group.id}`)}
+                              className="flex items-center pl-10 pr-3 py-1.5 rounded-xl text-left w-full transition-all duration-150 text-secondary/50 hover:bg-white/5 hover:text-white"
+                          >
+                              <span className="text-[11px] font-semibold truncate">{group.name}</span>
+                          </button>
+                      ))}
+                  </div>
+              )}
+          </div>
+
+          <div className="p-6 border-t border-white/5 shrink-0">
+              <button
+                  onClick={logout}
+                  className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full text-sm font-bold uppercase tracking-widest"
+              >
+                  <LogOut size={19} />
+                  <span>Logout</span>
+              </button>
+          </div>
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="px-8 py-6 flex items-center justify-between border-b bg-white/30 backdrop-blur-md sticky top-0 z-10">
+        <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4 border-b border-secondary/10">
           <div><h1 className="text-xl font-black">Spending Overview</h1><p className="text-sm text-secondary/70 font-semibold">Your real-time financial analysis</p></div>
           <div className="flex items-center gap-4">
             <MonthlyBudgetEditor
@@ -231,7 +271,7 @@ const ActivityFeed = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-8 pb-12 space-y-8 mt-6">
+        <div className="flex-1 overflow-y-auto px-8 pb-12 space-y-8 custom-scrollbar">
           {loading ? (
             <div className="flex-1 flex items-center justify-center py-20 text-secondary/40 font-semibold animate-pulse">Loading analytics data...</div>
           ) : (
