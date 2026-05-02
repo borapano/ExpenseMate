@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import api from '../api';
@@ -8,19 +8,46 @@ import {
     Bell, ShieldCheck, AlertCircle
 } from 'lucide-react';
 
-// Importet e komponenteve të reja
-import ToReceiveCard from '../components/Expenses/ToReceiveCard';
-import ToPayCard from '../components/Expenses/ToPayCard';
-import PendingRequestsCard from '../components/Expenses/PendingRequestsCard';
-import DebtsToSettleCard from '../components/Expenses/DebtsToSettleCard';
-import ExpenseHistoryCard from '../components/Expenses/ExpenseHistoryCard';
-import { calculateExpenseStatus } from '../utils/expenseStatus';
+import {
+    ToReceiveCard,
+    ToPayCard,
+    PendingRequestsCard,
+    DebtsToSettleCard,
+    ExpenseHistoryCard
+} from '../components/Expenses';
+import SettleUpModal from '../components/SettleUpModal';
 
+/*
+ * Expenses Page — Full data flow:
+ *
+ * 1. DataContext.refreshAllData() fetches 6 endpoints on auth:
+ *    - /users/me/expenses            → expenses[]
+ *    - /users/me/settlement_dashboard → settlementDashboard
+ *    - /groups/me, /analytics, etc.
+ *
+ * 2. settlementDashboard provides:
+ *    - global_debts[]         → DebtsToSettleCard
+ *    - global_requests[]      → PendingRequestsCard (Section 1: incoming confirmations)
+ *    - expected_payments[]    → PendingRequestsCard (Section 2: receivables)
+ *    - Totals for ToPayCard and ToReceiveCard
+ *
+ * 3. expenses[] provides:
+ *    - Each expense has transaction_status (NONE, PENDING, CONFIRMED)
+ *    - ExpenseHistoryCard renders status from this field
+ *
+ * 4. Actions (Pay, Confirm, Reject) → API call → refreshAllData() → all cards update.
+ */
+
+// ── Sidebar NavItem ──────────────────────────────────────────────────────────
 const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to: string }) => (
     <NavLink
         to={to}
-        className={({ isActive }) => `flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-200 ${isActive ? 'bg-secondary/20 text-accent shadow-sm' : 'text-secondary hover:bg-white/5 hover:text-white'
-            }`}
+        className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-200 ${isActive
+                ? 'bg-secondary/20 text-accent shadow-sm'
+                : 'text-secondary hover:bg-white/5 hover:text-white'
+            }`
+        }
     >
         {({ isActive }) => (
             <>
@@ -32,159 +59,183 @@ const NavItem = ({ icon, label, to }: { icon: React.ReactNode; label: string; to
     </NavLink>
 );
 
+// ── Page ─────────────────────────────────────────────────────────────────────
 const Expenses: React.FC = () => {
     const { user, logout } = useAuth();
-    const { 
-        expenses, 
+    const {
+        expenses,
         setExpenses,
-        totalExpenses, 
+        totalExpenses,
         setTotalExpenses,
-        groups, 
-        settlementDashboard, 
-        loading, 
-        refreshAllData 
+        groups,
+        settlementDashboard,
+        loading,
+        refreshAllData,
     } = useData();
-    
-    // UI states
-    const [searchQuery, setSearchQuery] = useState("");
-    const [selectedGroup, setSelectedGroup] = useState<{ id: string | null, name: string }>({ id: null, name: "All Groups" });
+
+    // ── UI state ──────────────────────────────────────────────────────────
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedGroup, setSelectedGroup] = useState<{ id: string | null; name: string }>({ id: null, name: 'All Groups' });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-    // Pagination states
     const [visibleCount, setVisibleCount] = useState(5);
-
-    const historyRef = useRef<HTMLDivElement | null>(null);
-
     const [payingDebts, setPayingDebts] = useState(new Set<string>());
-    const [toastMessage, setToastMessage] = useState<{ title: string, type: 'success' | 'error' } | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [modalData, setModalData] = useState<{ amount: number; receiverName: string; receiverId: string; groupId: string; expenseId: string | null } | null>(null);
+    const [toastMessage, setToastMessage] = useState<{ title: string; type: 'success' | 'error' } | null>(null);
+    const historyRef = useRef<HTMLDivElement | null>(null);
+    const realOffset = useRef<number>(0); // tracks true backend offset independently of filters
 
-    const pendingRequests = settlementDashboard?.global_requests || [];
-    const pendingDebts = settlementDashboard?.global_debts || [];
-    const expectedPayments = settlementDashboard?.expected_payments || [];
+    // ── Dashboard-derived data ────────────────────────────────────────────
+    const pendingSettlementsReceived = settlementDashboard?.global_requests ?? [];
+    const payables = settlementDashboard?.global_debts ?? [];
+    const receivables = settlementDashboard?.expected_payments ?? [];
 
-    // Derived lists based on Expense-Specific logic
-    const { debtExpenses, receivableExpenses } = useMemo(() => {
-        const debts: any[] = [];
-        const receivables: any[] = [];
+    // To Pay card
+    // activeToPay = sum of active debts (not pending) — same source as DebtsToSettleCard
+    // pendingSent = sum of debts where I sent payment, awaiting confirmation
+    const pendingSent = (payables as any[]).filter(d => d.is_pending).reduce((sum, d) => sum + (d?.amount ?? 0), 0);
+    const activeToPay = (payables as any[]).filter(d => !d.is_pending).reduce((sum, d) => sum + (d?.amount ?? 0), 0);
 
-        expenses.forEach(exp => {
-            const statusInfo = calculateExpenseStatus(exp, user?.id, pendingRequests, expectedPayments);
-            const { status, amount, isPending, isActionRequired, isWaitingForOther } = statusInfo;
+    // To Receive card
+    // activeToReceive = sum of expected_payments list — same source as PendingRequestsCard Active Credits
+    // pendingReceived = sum of incoming settlements awaiting my confirmation — same source as PendingRequestsCard Action Required
+    const activeToReceive = (receivables as any[]).reduce((sum, r) => sum + (r?.amount ?? 0), 0);
+    const pendingReceived = (pendingSettlementsReceived as any[]).reduce((sum, r) => sum + (r?.amount ?? 0), 0);
 
-            // 1. Debts to Settle: 
-            // Condition: Balance < 0 OR I sent money and am waiting for confirmation (Sender)
-            if ((amount && amount < -0.01) || (isPending && isWaitingForOther)) {
-                debts.push({ ...exp, statusAmount: amount, ...statusInfo });
-            }
-
-            // 2. Receivables: 
-            // Condition: Balance > 0 OR Someone sent me money and I need to confirm (Recipient)
-            if ((amount && amount > 0.01) || (isPending && isActionRequired)) {
-                receivables.push({ ...exp, statusAmount: amount, ...statusInfo });
-            }
-        });
-
-        return { debtExpenses: debts, receivableExpenses: receivables };
-    }, [expenses, user?.id, pendingRequests, expectedPayments]);
-
-
-
-    const amountToReceive = settlementDashboard?.total_owed_to_me || 0;
-    const amountOwed = settlementDashboard?.total_gross_debt || 0;
-    const effectiveTotal = settlementDashboard?.effective_total || 0;
-    const totalPendingSent = settlementDashboard?.total_pending_sent || 0;
-    const totalPendingReceived = settlementDashboard?.total_pending_received || 0;
-    const effectiveReceiveTotal = settlementDashboard?.effective_receive_total || 0;
-
+    // ── Toast helper ──────────────────────────────────────────────────────
     const showToast = (title: string, type: 'success' | 'error' = 'success') => {
         setToastMessage({ title, type });
         setTimeout(() => setToastMessage(null), 3500);
     };
 
-    useEffect(() => {
-        refreshAllData();
-        setVisibleCount(5);
-    }, [refreshAllData]);
+    // ── Action: Confirm incoming payment ──────────────────────────────────
+    const handleConfirmRequest = async (id: string) => {
+        try {
+            await api.patch(`/settlements/${id}/confirm`);
+            showToast('Settlement Confirmed!');
+            setVisibleCount(5);
+            realOffset.current = 0;
+            await refreshAllData();
+        } catch {
+            showToast('Error confirming settlement', 'error');
+        }
+    };
 
+    // ── Action: Reject incoming payment ──────────────────────────────────
+    const handleRejectRequest = async (id: string) => {
+        try {
+            await api.patch(`/settlements/${id}/reject`);
+            showToast('Settlement Rejected');
+            setVisibleCount(5);
+            realOffset.current = 0;
+            await refreshAllData();
+        } catch {
+            showToast('Error rejecting settlement', 'error');
+        }
+    };
+
+    // ── Action: Open pay modal ────────────────────────────────────────────
+    const handlePayDebt = (debt: any) => {
+        setModalData({
+            amount: debt.amount,
+            receiverName: debt.receiver_name,
+            receiverId: debt.receiver_id,
+            groupId: debt.group_id,
+            expenseId: debt.expense_id,
+        });
+        setIsModalOpen(true);
+    };
+
+    // ── Action: Confirm payment in modal → POST /settlements/ ─────────────
+    const confirmPayment = async () => {
+        if (!modalData || isSubmitting) return;
+        const debtId = modalData.expenseId ?? modalData.receiverId;
+
+        setIsSubmitting(true);
+        setPayingDebts(prev => new Set(prev).add(debtId));
+
+        try {
+            await api.post('/settlements/', {
+                amount: modalData.amount,
+                group_id: modalData.groupId,
+                receiver_id: modalData.receiverId,
+                expense_id: modalData.expenseId,
+            });
+            showToast('Payment submitted! Awaiting confirmation.');
+            setIsModalOpen(false);
+            setModalData(null);
+            setVisibleCount(5);
+            realOffset.current = 0;
+            await refreshAllData();
+        } catch (err) {
+            setPayingDebts(prev => { const s = new Set(prev); s.delete(debtId); return s; });
+            throw err;
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // ── Pagination ────────────────────────────────────────────────────────
     const handleSeeMore = async () => {
         try {
-            const currentOffset = expenses.length;
-            const res = await api.get(`/users/me/expenses?limit=5&offset=${currentOffset}${selectedGroup.id ? `&group_id=${selectedGroup.id}` : ''}`);
-            setExpenses([...expenses, ...(res.data?.expenses || [])]);
-            setTotalExpenses(res.data?.total || 0);
-            setVisibleCount(prev => prev + 5);
-        } catch (err) {
-            showToast("Error loading more expenses", "error");
+            const offset = realOffset.current;
+            const gid = selectedGroup.id ? `&group_id=${selectedGroup.id}` : '';
+            const res = await api.get(`/users/me/expenses?limit=5&offset=${offset}${gid}`);
+            const newItems = res.data?.expenses ?? [];
+            setExpenses(prev => {
+                // Avoid duplicates by filtering out items we already have
+                const existingIds = new Set(prev.map((e: any) => e.id));
+                const fresh = newItems.filter((e: any) => !existingIds.has(e.id));
+                return [...prev, ...fresh];
+            });
+            setTotalExpenses(res.data?.total ?? 0);
+            realOffset.current = offset + newItems.length;
+            setVisibleCount(c => c + 5);
+        } catch {
+            showToast('Error loading more expenses', 'error');
         }
     };
 
     const handleSeeLess = () => {
+        // Only collapse visible count — never destroy fetched data
         setVisibleCount(5);
-        // Resetting back to initial 5 expenses
-        setExpenses(prev => prev.slice(0, 5));
     };
 
-    useEffect(() => { 
-        refreshAllData(); 
-    }, [refreshAllData]);
+    // ── Filtering ─────────────────────────────────────────────────────────
+    const uniqueGroups = useMemo(
+        () => [{ id: null, name: 'All Groups' }, ...groups.map(g => ({ id: g.id, name: g.name }))],
+        [groups]
+    );
 
-    const handleConfirmRequest = async (id: string) => {
-        try {
-            await api.patch(`/settlements/${id}/confirm`);
-            showToast("Settlement Confirmed!");
-            refreshAllData();
-        } catch (err) { showToast("Error confirming settlement", "error"); }
-    };
+    const filteredExpenses = useMemo(
+        () => (expenses as any[]).filter(e => {
+            if (!e) return false;
+            const matchSearch = (e.description ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+            const matchGroup = !selectedGroup.id || e.group_id === selectedGroup.id;
+            return matchSearch && matchGroup;
+        }),
+        [expenses, searchQuery, selectedGroup.id]
+    );
 
-    const handleRejectRequest = async (id: string) => {
-        try {
-            await api.patch(`/settlements/${id}/reject`);
-            showToast("Settlement Rejected", "error");
-            refreshAllData();
-        } catch (err) { showToast("Error rejecting settlement", "error"); }
-    };
+    const hasMore = selectedGroup.id
+        ? visibleCount < filteredExpenses.length  // local filter active → compare against filtered count
+        : expenses.length < totalExpenses;         // no filter → compare against backend total
 
-    const handlePayDebt = async (expense: any) => {
-        const debtId = `expense-${expense.id}`;
-        try {
-            setPayingDebts(prev => new Set(prev).add(debtId));
-            const payload = {
-                amount: Math.abs(parseFloat(Number(expense.statusAmount).toFixed(2))),
-                group_id: expense.group_id,
-                receiver_id: expense.payer_id,
-                expense_id: expense.id // Linking specifically to this expense
-            };
-            await api.post('/settlements/', payload);
-            showToast("Payment submitted for confirmation!");
-            refreshAllData();
-        } catch (err) {
-            setPayingDebts(prev => {
-                const next = new Set(prev);
-                next.delete(debtId);
-                return next;
-            });
-            showToast("Error submitting payment.", "error");
-        }
-    };
+    // ── Loading guard (show page once dashboard data arrives) ──────────────
+    if (loading && !settlementDashboard) {
+        return (
+            <div className="flex min-h-screen bg-[#F7F4F0] items-center justify-center font-bold text-primary/50 text-sm">
+                Loading...
+            </div>
+        );
+    }
 
-    const uniqueGroups = useMemo(() => {
-        return [{ id: null, name: "All Groups" }, ...groups.map(g => ({ id: g.id, name: g.name }))];
-    }, [groups]);
-
-    const filteredExpenses = useMemo(() => {
-        return expenses.filter((e: any) => {
-            const matchesSearch = e.description.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesGroup = !selectedGroup.id || e.group_id === selectedGroup.id;
-            return matchesSearch && matchesGroup;
-        });
-    }, [expenses, searchQuery, selectedGroup.id]);
-
-    const hasMore = expenses.length < totalExpenses;
-
-    if (loading) return <div className="flex min-h-screen bg-[#F7F4F0] items-center justify-center font-bold text-primary">Loading...</div>;
-
+    // ── Render ─────────────────────────────────────────────────────────────
     return (
         <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary relative">
+
+            {/* Toast */}
             {toastMessage && (
                 <div className={`fixed top-6 right-8 px-5 py-3 rounded-xl shadow-lg z-50 flex items-center gap-3 font-bold text-sm tracking-wide transition-all ${toastMessage.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
                     }`}>
@@ -193,6 +244,7 @@ const Expenses: React.FC = () => {
                 </div>
             )}
 
+            {/* Sidebar */}
             <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0">
                 <div className="p-8 flex items-center gap-3">
                     <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
@@ -208,12 +260,16 @@ const Expenses: React.FC = () => {
                     <NavItem icon={<Settings size={19} />} label="Settings" to="/settings" />
                 </nav>
                 <div className="p-6 border-t border-white/5 mt-auto">
-                    <button onClick={logout} className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full text-sm font-bold uppercase tracking-widest">
+                    <button
+                        onClick={logout}
+                        className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full text-sm font-bold uppercase tracking-widest"
+                    >
                         <LogOut size={19} /> Logout
                     </button>
                 </div>
             </aside>
 
+            {/* Main */}
             <main className="flex-1 flex flex-col overflow-hidden">
                 <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4">
                     <div>
@@ -223,7 +279,9 @@ const Expenses: React.FC = () => {
                     <div className="flex items-center gap-4">
                         <button className="relative p-2 text-secondary hover:text-primary transition-colors">
                             <Bell size={22} />
-                            {pendingRequests.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full" />}
+                            {pendingSettlementsReceived.length > 0 && (
+                                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full" />
+                            )}
                         </button>
                         <div className="flex items-center gap-3 bg-white p-1 pr-4 rounded-full shadow-sm border border-secondary/10">
                             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-accent text-xs font-bold">
@@ -234,33 +292,36 @@ const Expenses: React.FC = () => {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto px-8 pb-10 space-y-8 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-8 pb-10 space-y-6 custom-scrollbar">
+
+                    {/* Summary Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                        <ToReceiveCard 
-                            amount={amountToReceive} 
-                            effectiveAmount={effectiveReceiveTotal}
-                            pendingAmount={totalPendingReceived}
+                        <ToReceiveCard
+                            totalToReceive={activeToReceive}
+                            pendingReceived={pendingReceived}
                         />
                         <ToPayCard
-                            amount={amountOwed}
-                            effectiveAmount={effectiveTotal}
-                            pendingAmount={totalPendingSent}
+                            totalToPay={activeToPay}
+                            pendingSent={pendingSent}
                         />
                     </div>
 
+                    {/* Actionable Cards */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <PendingRequestsCard
-                            expenses={receivableExpenses}
+                            pendingSettlements={pendingSettlementsReceived}
+                            receivables={receivables}
                             onConfirm={handleConfirmRequest}
                             onReject={handleRejectRequest}
                         />
                         <DebtsToSettleCard
-                            expenses={debtExpenses}
+                            payables={payables}
                             payingDebts={payingDebts}
                             onPay={handlePayDebt}
                         />
                     </div>
 
+                    {/* Expense History */}
                     <ExpenseHistoryCard
                         filteredExpenses={filteredExpenses}
                         searchQuery={searchQuery}
@@ -276,12 +337,18 @@ const Expenses: React.FC = () => {
                         onSeeLess={handleSeeLess}
                         historyRef={historyRef}
                         user={user}
-                        pendingDebts={pendingDebts}
-                        pendingRequests={pendingRequests}
-                        expectedPayments={expectedPayments}
                     />
                 </div>
             </main>
+
+            {/* Payment Modal */}
+            <SettleUpModal
+                isOpen={isModalOpen}
+                onClose={() => { setIsModalOpen(false); setModalData(null); }}
+                onConfirm={confirmPayment}
+                receiverName={modalData?.receiverName}
+                amount={modalData?.amount}
+            />
         </div>
     );
 };

@@ -61,6 +61,8 @@ const Dashboard = () => {
         monthly_data: spendingHistory.monthly_data
     }), [settlementDashboard, spendingHistory]);
 
+    console.log("Component Data (Dashboard):", { globalDebts, globalRequests, expectedPayments, stats });
+
     // Initial load is handled by DataContext
     useEffect(() => {
         refreshAllData();
@@ -180,8 +182,8 @@ const Dashboard = () => {
                             <div className="space-y-6">
                                 <FinancialHealthCard
                                     data={{
-                                        total_owed_to_you: stats.total_owed_to_you,
-                                        total_you_owe: stats.total_you_owe
+                                        total_owed_to_you: stats?.total_owed_to_you || 0,
+                                        total_you_owe: stats?.total_you_owe || 0
                                     }}
                                 />
 
@@ -192,7 +194,7 @@ const Dashboard = () => {
                                             <CheckCircle size={14} /> To Verify
                                         </h4>
                                         <div className="space-y-3">
-                                            {globalRequests.map(req => (
+                                            {(globalRequests || []).map(req => (
                                                 <div key={req.id} className="bg-white p-4 rounded-[1.5rem] flex flex-col gap-3 shadow-sm border border-emerald-50">
                                                     <div className="flex justify-between items-start">
                                                         <div>
@@ -219,7 +221,7 @@ const Dashboard = () => {
                                         </h4>
                                         <div className="space-y-3">
                                             {/* To Pay */}
-                                            {globalDebts.map(debt => (
+                                            {(globalDebts || []).map(debt => (
                                                 <div key={`debt-${debt.group_id}-${debt.user_id}`} className="bg-white p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-red-50">
                                                     <div>
                                                         <p className="font-bold text-primary text-sm">{debt.user_name}</p>
@@ -232,7 +234,7 @@ const Dashboard = () => {
                                                 </div>
                                             ))}
                                             {/* Awaiting Confirmation */}
-                                            {expectedPayments.map(exp => (
+                                            {(expectedPayments || []).map(exp => (
                                                 <div key={`exp-${exp.group_id}-${exp.user_id}`} className="bg-amber-50/50 p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-amber-100/50">
                                                     <div>
                                                         <p className="font-bold text-amber-900 text-sm">{exp.user_name}</p>

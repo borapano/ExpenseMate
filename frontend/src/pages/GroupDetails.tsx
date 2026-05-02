@@ -370,6 +370,7 @@ const GroupDetails: React.FC = () => {
                                     debts={group.my_debts}
                                     groupId={String(group.id)}
                                     onRefresh={fetchGroupDetails}
+                                    onRefreshGlobal={refreshAllData}
                                 />
                             </div>
                         )}

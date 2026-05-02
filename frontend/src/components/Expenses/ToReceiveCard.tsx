@@ -1,48 +1,49 @@
 import React from 'react';
-import { Clock } from 'lucide-react';
+import { TrendingUp, Clock } from 'lucide-react';
+
+/*
+ * ToReceiveCard — Summary of money owed TO the current user.
+ *
+ * "Sum of others' shares in ExpenseParticipant where I am the expense.payer_id and is_settled == False."
+ */
 
 interface Props {
-    amount: number;
-    effectiveAmount?: number;
-    pendingAmount?: number;
+    totalToReceive: number;
+    pendingReceived: number;
 }
 
-const ToReceiveCard: React.FC<Props> = ({ amount, effectiveAmount = amount, pendingAmount = 0 }) => {
-    // Përdorim të njëjtin formatim si te TotalSpentCard
-    const formattedAmount = `€${effectiveAmount.toLocaleString('en', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    })}`;
+const fmt = (v: number) =>
+    `$${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    const formattedPending = `€${pendingAmount.toLocaleString('en', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    })}`;
+const ToReceiveCard: React.FC<Props> = ({ totalToReceive, pendingReceived }) => (
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-secondary/10 flex flex-col gap-4 relative overflow-hidden hover:shadow-md transition-shadow">
+        <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-500/5 rounded-bl-full pointer-events-none" />
 
-    return (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-secondary/10 flex flex-col gap-2 relative overflow-hidden h-full transition-shadow duration-200 hover:shadow-md cursor-default">
-            {/* Sfondi dekorativ në cep (emerald për To Receive) */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-full pointer-events-none" />
+        <p className="text-[10px] font-black uppercase tracking-widest text-secondary/50">
+            To Receive
+        </p>
 
-            <p className="text-[10px] font-black uppercase tracking-widest text-secondary/60">
-                To Receive
+        <div>
+            <p className="text-3xl font-black text-emerald-600 tracking-tight leading-none">
+                {fmt(totalToReceive)}
             </p>
-
-            <div className="flex flex-col gap-1">
-                <p className="text-3xl font-black text-emerald-600 tracking-tight">
-                    {formattedAmount}
-                </p>
-                <p className="text-xs font-bold text-amber-500 flex items-center gap-1">
-                    <Clock size={12} />
-                    {formattedPending} awaiting confirmation
-                </p>
-            </div>
-
-            <p className="text-[10px] text-secondary/50 font-bold mt-1">
-                Total pending from others
+            <p className="text-[10px] font-bold uppercase tracking-wider text-secondary/40 mt-1 flex items-center gap-1">
+                <TrendingUp size={11} /> Total Active Receivables
             </p>
         </div>
-    );
-};
+
+        {pendingReceived > 0.005 && (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
+                <Clock size={14} className="text-amber-500 shrink-0" />
+                <div>
+                    <p className="text-[13px] font-black text-amber-600 leading-none">{fmt(pendingReceived)}</p>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-amber-400 mt-0.5">
+                        Awaiting Your Confirmation
+                    </p>
+                </div>
+            </div>
+        )}
+    </div>
+);
 
 export default ToReceiveCard;

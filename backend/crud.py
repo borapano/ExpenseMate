@@ -472,6 +472,7 @@ def create_settlement(db: Session, settlement: schemas.SettlementCreate, sender_
         group_id=settlement.group_id,
         sender_id=sender_id,
         receiver_id=settlement.receiver_id,
+        expense_id=settlement.expense_id,
         amount=settlement.amount,
         status="PENDING"
     )
@@ -507,27 +508,60 @@ def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
         # 1. Kalojmë statusin në CONFIRMED
         settlement.status = "CONFIRMED"
 
-        # 2. Mbyllim borxhet në mënyrë ciklike (FIFO)
-        borxhet = db.query(models.ExpenseParticipant)\
-            .join(models.Expense)\
-            .filter(
-                models.Expense.group_id == settlement.group_id,
-                models.Expense.payer_id == receiver_id,
-                models.ExpenseParticipant.user_id == settlement.sender_id,
-                models.ExpenseParticipant.is_settled == False
-            ).order_by(models.Expense.created_date.asc()).all()
-
-        rem_amount = float(settlement.amount)
-        for b in borxhet:
-            if rem_amount <= 0: break
-            
-            share = float(b.share_amount)
-            if share <= rem_amount:
-                rem_amount -= share
-                b.is_settled = True
+        if settlement.expense_id:
+            # 2a. Mbyllim borxhin specifikisht për këtë shpenzim
+            borxh = db.query(models.ExpenseParticipant)\
+                .filter(
+                    models.ExpenseParticipant.expense_id == settlement.expense_id,
+                    models.ExpenseParticipant.user_id == settlement.sender_id
+                ).first()
+            if borxh:
+                borxh.is_settled = True
             else:
-                b.share_amount = share - rem_amount
-                rem_amount = 0
+                # Fallback: sender nuk është participant specifik — shlye FIFO
+                logger.warning(f"confirm_settlement: borxh not found for expense_id={settlement.expense_id}, sender_id={settlement.sender_id}. Falling back to FIFO.")
+                borxhet = db.query(models.ExpenseParticipant)\
+                    .join(models.Expense)\
+                    .filter(
+                        models.Expense.group_id == settlement.group_id,
+                        models.Expense.payer_id == receiver_id,
+                        models.ExpenseParticipant.user_id == settlement.sender_id,
+                        models.ExpenseParticipant.is_settled == False
+                    ).order_by(models.Expense.created_date.asc()).all()
+                rem_amount = float(settlement.amount)
+                for b in borxhet:
+                    if rem_amount <= 0: break
+                    share = float(b.share_amount)
+                    if share <= rem_amount:
+                        rem_amount -= share
+                        b.is_settled = True
+                    else:
+                        b.share_amount = share - rem_amount
+                        rem_amount = 0
+        else:
+            # 2b. Mbyllim borxhet në mënyrë ciklike (FIFO) pёr settlements e vjetra
+            borxhet = db.query(models.ExpenseParticipant)\
+                .join(models.Expense)\
+                .filter(
+                    models.Expense.group_id == settlement.group_id,
+                    models.Expense.payer_id == receiver_id,
+                    models.ExpenseParticipant.user_id == settlement.sender_id,
+                    models.ExpenseParticipant.is_settled == False
+                ).order_by(models.Expense.created_date.asc()).all()
+
+            rem_amount = float(settlement.amount)
+            for b in borxhet:
+                if rem_amount <= 0: break
+                
+                share = float(b.share_amount)
+                if share <= rem_amount:
+                    rem_amount -= share
+                    b.is_settled = True
+                else:
+                    b.share_amount = share - rem_amount
+                    rem_amount = 0
+                    # share_amount u zvogëlua por borxhi nuk u shlye plotësisht
+                    # is_settled mbetet False — i saktë
 
         db.commit()
         return True

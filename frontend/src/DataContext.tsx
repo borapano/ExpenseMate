@@ -91,6 +91,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 api.get('/users/me/spending-history')
             ]);
 
+            console.log("DEBUG FRONTEND DATA - Dashboard:", dashboardRes.data);
+            console.log("DEBUG FRONTEND DATA - Expenses:", expensesRes.data);
+            
             setExpenses(expensesRes.data?.expenses || []);
             setTotalExpenses(expensesRes.data?.total || 0);
             setGroups(groupsRes.data || []);

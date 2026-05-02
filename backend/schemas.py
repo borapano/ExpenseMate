@@ -88,10 +88,13 @@ class ExpenseCreate(ExpenseBase):
 class ExpenseOut(ExpenseBase):
     id: UUID
     group_id: UUID
-    payer_id: UUID 
     payer_name: Optional[str] = None 
     participants: List[ExpenseParticipantOut] = Field(default_factory=list)
     created_date: datetime 
+    
+    # Këto fusha llogariten nga backend-i në mënyrë specifike për userin
+    user_balance: Optional[float] = None
+    transaction_status: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -124,6 +127,7 @@ class SettlementBase(BaseModel):
     amount: Decimal = Field(..., gt=0, decimal_places=2)
     group_id: UUID
     receiver_id: UUID
+    expense_id: UUID  # Required — every settlement must link to a specific expense
 
 class SettlementCreate(SettlementBase):
     pass
@@ -133,6 +137,7 @@ class SettlementOut(SettlementBase):
     sender_id: UUID
     sender_name: Optional[str] = None
     receiver_name: Optional[str] = None
+    expense_id: UUID  # Required
     status: SettlementStatus
     created_at: datetime
     

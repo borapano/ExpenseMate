@@ -150,7 +150,7 @@ const ChartCard = ({ title, children, legend }) => (
 const ActivityFeed = () => {
   const { user, logout, refreshUser } = useAuth();
   const { analytics, refreshAllData, loading } = useData();
-  
+
   const stats = analytics.stats;
   const charts = analytics.charts;
   // Use user.monthly_budget directly from AuthContext as it's the primary source
@@ -194,12 +194,12 @@ const ActivityFeed = () => {
         <header className="px-8 py-6 flex items-center justify-between border-b bg-white/30 backdrop-blur-md sticky top-0 z-10">
           <div><h1 className="text-xl font-black">Spending Overview</h1><p className="text-sm text-secondary/70 font-semibold">Your real-time financial analysis</p></div>
           <div className="flex items-center gap-4">
-            <MonthlyBudgetEditor 
-              budget={monthlyBudget} 
+            <MonthlyBudgetEditor
+              budget={monthlyBudget}
               onSave={async () => {
                 await refreshUser();
                 await refreshAllData();
-              }} 
+              }}
             />
             <div className="w-[1px] h-8 bg-secondary/10 hidden sm:block" />
             <button className="relative p-2 text-secondary hover:text-primary"><Bell size={22} /><span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full" /></button>
@@ -217,7 +217,7 @@ const ActivityFeed = () => {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
                 <TotalSpentCard amount={stats?.totalSpentMonth || 0} previousMonthAmount={stats?.totalSpentLastMonth || 0} />
-                <TopCategoryCard categoryName={stats?.topCategory?.name || 'N/A'} monthlySpend={stats?.topCategory?.amount || 0} />
+                <TopCategoryCard categoryName={stats?.topCategory?.name || 'N/A'} monthlySpend={stats?.topCategory?.amount || 0} allCategories={charts?.categorySplit || []} />
                 <BudgetRemainingCard remainingAmount={monthlyBudget - (stats?.totalSpentMonth || 0)} totalBudget={monthlyBudget} spentAmount={stats?.totalSpentMonth || 0} />
                 <BudgetProgressCard spentAmount={stats?.totalSpentMonth || 0} totalBudget={monthlyBudget} />
               </div>

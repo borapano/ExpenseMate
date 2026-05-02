@@ -117,6 +117,7 @@ class Settlement(Base):
     group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), nullable=False)
     sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False) # Ai që paguan
     receiver_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False) # Ai që merr paratë
+    expense_id = Column(UUID(as_uuid=True), ForeignKey("expenses.id"), nullable=True) # ✅ Lidhja me shpenzimin specifik
     
     amount = Column(Numeric(10, 2), nullable=False)
     # Statuset: PENDING, CONFIRMED, REJECTED
@@ -128,3 +129,4 @@ class Settlement(Base):
     group = relationship("Group", back_populates="settlements")
     sender = relationship("User", foreign_keys=[sender_id], back_populates="settlements_sent")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="settlements_received")
+    expense = relationship("Expense") # ✅ Lidhja me shpenzimin specifik

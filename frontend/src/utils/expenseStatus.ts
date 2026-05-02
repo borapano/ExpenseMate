@@ -1,5 +1,3 @@
-import React from 'react';
-
 export type ExpenseStatus = 'SETTLED' | 'IN_VERIFICATION' | 'DEBT' | 'RECEIVABLE';
 
 export interface StatusInfo {
@@ -8,98 +6,84 @@ export interface StatusInfo {
     colorClass: string;
     amount?: number;
     isPending?: boolean;
-    isActionRequired?: boolean; // User needs to confirm something
-    isWaitingForOther?: boolean; // User sent/performed action, waiting for other
+    isActionRequired?: boolean;
+    isWaitingForOther?: boolean;
 }
 
 /**
- * Standardized logic to determine the status of an expense for a specific user.
+ * Determines the display status of a single expense row for the current user.
+ *
+ * Priority:
+ *   1. IN_VERIFICATION — backend set transaction_status = 'PENDING' for this expense
+ *   2. DEBT            — user owes money (balance < 0)
+ *   3. RECEIVABLE      — user is owed money (balance > 0)
+ *   4. ISSUED/SETTLED  — fully resolved
+ *
+ * NOTE: pendingRequests / expectedPayments are global settlement objects and
+ *       do NOT carry expense_id, so we do NOT use them for per-expense matching.
+ *       Per-expense pending status is supplied by the backend via `transaction_status`.
  */
 export const calculateExpenseStatus = (
     expense: any,
     userId: string,
-    pendingRequests: any[] = [],
-    expectedPayments: any[] = []
+    _pendingRequests: any[] = [],  // kept for API compat; not used per-expense
+    _expectedPayments: any[] = [] // kept for API compat; not used per-expense
 ): StatusInfo => {
     const isPayer = expense.payer_id === userId;
     const myShareData = expense.participants?.find((p: any) => p.user_id === userId);
-    
-    // ─── 1. CALCULATE SPECIFIC BALANCE ─────────────────────────────────────
-    let balance = 0;
-    if (isPayer) {
-        // Amount others specifically owe me for THIS expense
-        balance = expense.participants?.reduce((acc: number, p: any) => {
-            if (p.user_id !== userId && !p.is_settled) return acc + Number(p.share_amount);
-            return acc;
-        }, 0) || 0;
-    } else {
-        // My specific remaining share for THIS expense
-        const isConfirmedSettled = myShareData?.is_settled;
-        balance = isConfirmedSettled ? 0 : -Number(myShareData?.share_amount || 0);
+
+    // ─── Balance ───────────────────────────────────────────────────────────────
+    // Prefer the backend-computed value; fall back to client-side derivation.
+    let balance: number = expense.user_balance;
+    if (balance === undefined || balance === null) {
+        if (isPayer) {
+            balance = (expense.participants ?? []).reduce((acc: number, p: any) => {
+                if (p.user_id !== userId && !p.is_settled) return acc + Number(p.share_amount);
+                return acc;
+            }, 0);
+        } else {
+            balance = myShareData?.is_settled ? 0 : -Number(myShareData?.share_amount ?? 0);
+        }
     }
 
-    // ─── 2. PENDING TRANSACTION CHECKS ─────────────────────────────────────
-    // Logic: Action has been taken specifically for this expense.
-    
-    // Check nested transactions
-    const pendingTx = (expense.transactions || []).find((t: any) => 
-        (t.user_id === userId || t.sender_id === userId || t.receiver_id === userId) && 
-        (t.status === 'pending' || t.is_pending)
-    );
-
-    // Fallback: Check global pending lists for specific matches
-    const isPendingConfirmation = isPayer && pendingRequests.some(r => r.expense_id === expense.id);
-    const isPendingPayment = !isPayer && expectedPayments.some(e => e.expense_id === expense.id);
-
-    const isPending = !!pendingTx || isPendingConfirmation || isPendingPayment;
-
-    if (isPending) {
-        // Action Required: Someone sent me money (I am Recipient)
-        const actionRequired = (isPayer && isPendingConfirmation) || (pendingTx && pendingTx.receiver_id === userId);
-        
-        // Waiting for Other: I sent money (I am Sender)
-        const waitingForOther = (!isPayer && isPendingPayment) || (pendingTx && pendingTx.sender_id === userId);
-
+    // ─── 1. IN VERIFICATION — pending settlement exists for this expense ──────
+    if (expense.transaction_status === 'PENDING') {
         return {
             status: 'IN_VERIFICATION',
             label: 'In Verification',
             colorClass: 'text-amber-500',
             amount: balance,
             isPending: true,
-            isActionRequired: actionRequired,
-            isWaitingForOther: waitingForOther
+            isActionRequired: isPayer,   // payer (= money receiver) must confirm
+            isWaitingForOther: !isPayer  // participant sent payment, waiting
         };
     }
 
-    // ─── 3. DEBT (Red) ───────────────────────────────────────────────────────
+    // ─── 2. DEBT ──────────────────────────────────────────────────────────────
     if (balance < -0.01) {
         return {
             status: 'DEBT',
-            label: `-€${Math.abs(balance).toFixed(2)} to pay`,
+            label: `-€${Math.abs(balance).toFixed(2)} (To Pay)`,
             colorClass: 'text-red-600',
             amount: balance
         };
     }
 
-    // ─── 4. RECEIVABLE (Green) ───────────────────────────────────────────────
+    // ─── 3. RECEIVABLE ────────────────────────────────────────────────────────
     if (balance > 0.01) {
         return {
             status: 'RECEIVABLE',
-            label: `+€${balance.toFixed(2)} to receive`,
+            label: `+€${balance.toFixed(2)} (To Be Paid)`,
             colorClass: 'text-emerald-600',
             amount: balance
         };
     }
 
-    // ─── 5. SETTLED (Gray) ───────────────────────────────────────────────────
+    // ─── 4. ISSUED / SETTLED ──────────────────────────────────────────────────
     return {
         status: 'SETTLED',
-        label: 'Settled',
+        label: 'ISSUED',
         colorClass: 'text-secondary/50',
         amount: 0
     };
 };
-
-
-
-

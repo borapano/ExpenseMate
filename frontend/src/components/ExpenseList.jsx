@@ -1,14 +1,20 @@
 import React from 'react';
-import {
-    Receipt, Calendar, User, ShoppingBag,
-    Coffee, Car, Home, Wrench, HelpCircle, Edit3, Trash2
-} from 'lucide-react';
-
+import { Receipt, Calendar, User, Edit3, Trash2 } from 'lucide-react';
 import { getCategoryDetails } from '../utils/categoryMap';
+import { calculateExpenseStatus } from '../utils/expenseStatus';
 
+/**
+ * ExpenseList — renders the expense rows inside a Group detail page.
+ *
+ * Status labels are derived from calculateExpenseStatus (same source of truth
+ * as ExpenseHistoryCard on the Expenses page) so the labels are always:
+ *   "ISSUED"             — fully settled
+ *   "+€X (To Be Paid)"  — others owe current user
+ *   "-€X (To Pay)"      — current user owes
+ *   "In Verification"   — payment pending confirmation
+ *   "No Stake"          — current user is not a participant
+ */
 const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) => {
-    // Debug log to track what is being received
-    console.log("Activity Feed Data:", expenses);
 
     if (isLoading) {
         return (
@@ -20,53 +26,54 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) =
         );
     }
 
-    // 1. Renditja: Primare nga created_date (data e futjes), me fallback tek expense_date
-    const sortedExpenses = expenses && Array.isArray(expenses) 
-        ? [...expenses].sort((a, b) => new Date(b?.created_date || b?.expense_date) - new Date(a?.created_date || a?.expense_date))
+    // Sort newest-first; fall back to expense_date if created_date is absent
+    const sortedExpenses = Array.isArray(expenses)
+        ? [...expenses].sort((a, b) =>
+            new Date(b?.created_date || b?.expense_date || 0) -
+            new Date(a?.created_date || a?.expense_date || 0)
+          )
         : [];
 
-    if (!sortedExpenses || sortedExpenses.length === 0) {
+    if (sortedExpenses.length === 0) {
         return (
             <div className="text-center py-16 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
                 <Receipt className="text-slate-300 mx-auto mb-4" size={32} />
-                <p className="text-slate-500 font-bold">Nuk ka ende shpenzime.</p>
+                <p className="text-slate-500 font-bold">No expenses yet.</p>
             </div>
         );
     }
 
     return (
         <div className="space-y-4">
-            {sortedExpenses && sortedExpenses.map((expense) => {
+            {sortedExpenses.map((expense) => {
                 if (!expense) return null;
 
-                // ✅ RREGULLIMI KRITIK: Krahasojmë duke i kthyer të dyja në String dhe Lowercase
-                const normalizedCurrentId = String(currentUserId || "").toLowerCase();
-                const normalizedPayerId = String(expense?.payer_id || "").toLowerCase();
-
-                const isPayer = normalizedPayerId === normalizedCurrentId;
-
+                // Normalize IDs to strings for safe comparison
+                const uid = String(currentUserId || '').toLowerCase();
+                const isPayer = String(expense?.payer_id || '').toLowerCase() === uid;
                 const participants = expense?.participants || [];
+                const totalAmount = Number(expense?.amount ?? 0);
 
-                // ✅ RREGULLIMI PËR "SKE PJESË"
-                const myParticipation = participants.find(p =>
-                    String(p?.user_id || "").toLowerCase() === normalizedCurrentId
+                // ── Status via shared utility (same logic as ExpenseHistoryCard) ──
+                const { label, colorClass, status } = calculateExpenseStatus(
+                    expense,
+                    currentUserId,
+                    [], // pendingRequests not available in group context; backend drives status
+                    []
                 );
 
-                const totalAmount = Number(expense?.amount || 0);
-                const myShare = myParticipation ? Number(myParticipation?.share_amount || 0) : 0;
+                // Determine if user has any stake in this expense
+                const myParticipation = participants.find(p =>
+                    String(p?.user_id || '').toLowerCase() === uid
+                );
+                const hasStake = isPayer || !!myParticipation;
 
-                let statusText = 'Ske pjesë';
-                let statusColor = 'text-slate-400';
-
-                if (isPayer) {
-                    // Nëse unë pagova 10€ dhe pjesa ime ishte 2€, do marr 8€ mbrapsht
-                    const toReceive = totalAmount - myShare;
-                    statusText = `Ti merr: €${toReceive.toFixed(2)}`;
-                    statusColor = 'text-emerald-500';
-                } else if (myParticipation) {
-                    statusText = `Detyrohesh: €${myShare.toFixed(2)}`;
-                    statusColor = 'text-rose-500';
-                }
+                // Left-bar colour: green = payer, red = debtor, gray = no stake
+                const barColor = isPayer
+                    ? 'bg-emerald-400'
+                    : myParticipation
+                        ? 'bg-rose-400'
+                        : 'bg-slate-200';
 
                 return (
                     <div
@@ -75,12 +82,12 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) =
                     >
                         <div className="flex items-center justify-between relative z-10">
 
-                            {/* LEFT SIDE */}
+                            {/* LEFT: Icon + description */}
                             <div className="flex items-center gap-4">
                                 {(() => {
-                                    const { icon, colorClass } = getCategoryDetails(expense?.category);
+                                    const { icon, colorClass: iconColor } = getCategoryDetails(expense?.category);
                                     return (
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColor}`}>
                                             {icon}
                                         </div>
                                     );
@@ -88,50 +95,55 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) =
 
                                 <div>
                                     <h4 className="font-black text-slate-800 text-sm mb-1">
-                                        {expense?.description || "Pa përshkrim"}
+                                        {expense?.description || 'No description'}
                                     </h4>
-
                                     <div className="flex items-center gap-3">
                                         <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
                                             <User size={12} />
-                                            {isPayer ? "Ti pagove" : (expense?.payer_name || "Anëtar")}
+                                            {isPayer ? 'You paid' : (expense?.payer_name || 'Member')}
                                         </span>
-
                                         <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
                                             <Calendar size={12} />
-                                            {expense?.expense_date ? new Date(expense.expense_date).toLocaleDateString('sq-AL', {
-                                                day: '2-digit',
-                                                month: 'short'
-                                            }) : "Data panjohur"}
+                                            {expense?.expense_date
+                                                ? new Date(expense.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                                                : 'Unknown date'}
                                         </span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* RIGHT SIDE */}
+                            {/* RIGHT: Amount + status */}
                             <div className="flex items-center gap-4">
                                 <div className="text-right">
                                     <div className="text-sm font-black text-slate-900">
                                         €{totalAmount.toFixed(2)}
                                     </div>
-                                    <div className={`text-[10px] font-black mt-0.5 uppercase ${statusColor}`}>
-                                        {statusText}
-                                    </div>
+                                    {hasStake ? (
+                                        <div className={`text-[10px] font-black mt-0.5 uppercase ${colorClass}`}>
+                                            {label}
+                                        </div>
+                                    ) : (
+                                        <div className="text-[10px] font-black mt-0.5 uppercase text-slate-300">
+                                            No Stake
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* EDIT/DELETE - Vetëm për krijuesin */}
+                                {/* Edit/Delete — payer only */}
                                 <div className="flex items-center gap-1 border-l border-slate-100 pl-3 min-w-[60px] justify-end">
                                     {isPayer && (
                                         <>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); onEdit && onEdit(expense); }}
                                                 className="p-1.5 hover:bg-amber-50 rounded-lg text-amber-500 transition-colors"
+                                                title="Edit expense"
                                             >
                                                 <Edit3 size={18} />
                                             </button>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); onDelete && onDelete(expense?.id); }}
                                                 className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 transition-colors"
+                                                title="Delete expense"
                                             >
                                                 <Trash2 size={18} />
                                             </button>
@@ -141,23 +153,26 @@ const ExpenseList = ({ expenses, currentUserId, onEdit, onDelete, isLoading }) =
                             </div>
                         </div>
 
-                        {/* LIST OF PARTICIPANTS */}
+                        {/* Participants list */}
                         {participants.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-slate-50 relative z-10 flex flex-wrap gap-2">
                                 {participants.map((p, idx) => (
-                                    <div key={idx} className="text-[10px] font-medium bg-slate-50 px-2 py-1 rounded text-slate-500 border border-slate-100 flex items-center gap-1">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
-                                        {p?.user_name || "Unknown"} <span className="font-bold text-slate-700">€{Number(p?.share_amount || 0).toFixed(2)}</span>
+                                    <div
+                                        key={p?.user_id || idx}
+                                        className="text-[10px] font-medium bg-slate-50 px-2 py-1 rounded text-slate-500 border border-slate-100 flex items-center gap-1"
+                                    >
+                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                        {p?.user_name || 'Unknown'}{' '}
+                                        <span className="font-bold text-slate-700">
+                                            €{Number(p?.share_amount ?? 0).toFixed(2)}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
                         )}
 
-                        {/* SHIRITI ANASH (STATUS INDICATOR) */}
-                        <div
-                            className={`absolute left-0 top-0 bottom-0 w-1 ${isPayer ? 'bg-emerald-400' : myParticipation ? 'bg-rose-400' : 'bg-slate-200'
-                                }`}
-                        ></div>
+                        {/* Status colour bar */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${barColor}`} />
                     </div>
                 );
             })}
