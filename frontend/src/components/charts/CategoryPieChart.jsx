@@ -7,6 +7,20 @@ import {
   Cell
 } from 'recharts';
 
+const SHORT_NAMES = {
+  'Food & Dining': 'Food',
+  'Bills & Subscriptions': 'Bills',
+  'Transportation': 'Transport',
+  'Entertainment': 'Entertain',
+  'Groceries': 'Groceries',
+  'Housing': 'Housing',
+  'Utilities': 'Utilities',
+  'Shopping': 'Shopping',
+  'Travel': 'Travel',
+  'Health': 'Health',
+  'Other': 'Other',
+};
+
 const renderActiveShape = (props) => {
   const {
     cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value,
@@ -14,10 +28,12 @@ const renderActiveShape = (props) => {
 
   if (!payload || !payload.name) return null;
 
+  const displayName = SHORT_NAMES[payload.name] ?? payload.name;
+
   return (
     <g>
       <text x={cx} y={cy - 10} textAnchor="middle" fill="#1A3263" className="text-sm" fontSize={13} fontWeight={700}>
-        {payload.name.split(' ')[0]}
+        {displayName}
       </text>
       <text x={cx} y={cy + 12} textAnchor="middle" fill="#547792" fontSize={12} fontWeight={600}>
         €{Number(value || 0).toFixed(0)}

@@ -1,15 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Clock, Users } from 'lucide-react';
-
-/*
- * DebtsToSettleCard — Payables list (money I owe).
- *
- * Section 1 — Active Debts:
- *   Unsettled shares I owe. Shows: receiver, description, group, amount + Pay button.
- *
- * Section 2 — Pending Confirmation:
- *   Debts I've paid but receiver hasn't confirmed yet.
- */
+import { ShieldCheck, Users } from 'lucide-react';
 
 interface Props {
     payables: any[];
@@ -25,11 +15,10 @@ const DebtsToSettleCard: React.FC<Props> = ({ payables, payingDebts, onPay }) =>
 
     const activeDebts = debts.filter(d => !d.is_pending && !payingDebts.has(d.expense_id));
     const pendingDebts = debts.filter(d => d.is_pending || payingDebts.has(d.expense_id));
-
     const totalItems = debts.length;
 
     return (
-        <div className="bg-white rounded-2xl border border-secondary/10 shadow-sm flex flex-col h-[360px] overflow-hidden">
+        <div className="bg-white rounded-2xl border border-secondary/10 shadow-sm flex flex-col h-[445px] overflow-hidden">
 
             {/* Header */}
             <div className="px-6 pt-5 pb-4 flex items-center justify-between shrink-0 border-b border-secondary/5">
@@ -43,18 +32,23 @@ const DebtsToSettleCard: React.FC<Props> = ({ payables, payingDebts, onPay }) =>
                 </div>
                 <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm ${activeDebts.length > 0 ? 'bg-red-500 text-white' : 'bg-primary text-white'
                     }`}>
-                    {totalItems}
+                    {totalItems} {totalItems === 1 ? 'item' : 'items'}
                 </span>
             </div>
 
             {/* Empty state */}
             {totalItems === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-secondary/20 gap-2">
+                <div className="flex-1 flex flex-col items-center justify-center text-secondary/20 gap-2 py-12">
                     <ShieldCheck size={32} strokeWidth={1.2} />
                     <p className="text-[10px] font-black uppercase tracking-widest">All settled up</p>
                 </div>
             ) : (
-                <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2
+                    [&::-webkit-scrollbar]:w-1.5
+                    [&::-webkit-scrollbar-track]:bg-transparent
+                    [&::-webkit-scrollbar-thumb]:bg-secondary/20
+                    [&::-webkit-scrollbar-thumb]:rounded-full
+                    [&::-webkit-scrollbar-thumb:hover]:bg-secondary/30">
 
                     {/* Section 1: Active Debts */}
                     {activeDebts.length > 0 && (
@@ -67,7 +61,6 @@ const DebtsToSettleCard: React.FC<Props> = ({ payables, payingDebts, onPay }) =>
                                     key={`active-${debt.expense_id}-${idx}`}
                                     className="flex items-center justify-between min-h-[68px] rounded-xl px-4 py-2 bg-white border border-secondary/10 hover:border-red-100 transition-colors shrink-0"
                                 >
-                                    {/* Left: receiver + description + group */}
                                     <div className="flex flex-col gap-0.5 min-w-0 max-w-[60%]">
                                         <p className="text-[13px] font-bold text-primary leading-tight truncate">
                                             {debt.receiver_name ?? 'Unknown'}
@@ -77,13 +70,11 @@ const DebtsToSettleCard: React.FC<Props> = ({ payables, payingDebts, onPay }) =>
                                         </p>
                                         <div className="flex items-center gap-1 mt-0.5">
                                             <Users size={9} className="text-secondary/30 shrink-0" strokeWidth={2.5} />
-                                            <p className="text-[9px] font-bold text-secondary/35 truncate uppercase tracking-wide">
+                                            <p className="text-[9px] font-bold text-secondary/35 truncate tracking-wide">
                                                 {debt.group_name ?? 'Unknown group'}
                                             </p>
                                         </div>
                                     </div>
-
-                                    {/* Right: amount + pay button */}
                                     <div className="flex flex-col items-end gap-1.5 shrink-0">
                                         <p className="text-[14px] font-black text-red-600 leading-none">
                                             -{fmt(debt.amount ?? 0)}
@@ -109,9 +100,8 @@ const DebtsToSettleCard: React.FC<Props> = ({ payables, payingDebts, onPay }) =>
                             {pendingDebts.map((debt, idx) => (
                                 <div
                                     key={`pending-${debt.expense_id}-${idx}`}
-                                    className="flex items-center justify-between min-h-[68px] rounded-xl px-4 py-2 bg-amber-50/50 border border-amber-100/80 shrink-0"
+                                    className="flex items-center justify-between min-h-[68px] rounded-xl px-4 py-2 bg-white border border-secondary/10 hover:border-amber-100 transition-colors shrink-0"
                                 >
-                                    {/* Left: receiver + description + group */}
                                     <div className="flex flex-col gap-0.5 min-w-0 max-w-[60%]">
                                         <p className="text-[13px] font-bold text-primary leading-tight truncate">
                                             {debt.receiver_name ?? 'Unknown'}
@@ -121,29 +111,26 @@ const DebtsToSettleCard: React.FC<Props> = ({ payables, payingDebts, onPay }) =>
                                         </p>
                                         <div className="flex items-center gap-1 mt-0.5">
                                             <Users size={9} className="text-secondary/30 shrink-0" strokeWidth={2.5} />
-                                            <p className="text-[9px] font-bold text-secondary/35 truncate uppercase tracking-wide">
+                                            <p className="text-[9px] font-bold text-secondary/35 truncate tracking-wide">
                                                 {debt.group_name ?? 'Unknown group'}
                                             </p>
                                         </div>
                                     </div>
-
-                                    {/* Right: amount + pending badge */}
                                     <div className="flex flex-col items-end gap-1 shrink-0">
                                         <p className="text-[14px] font-black text-red-600 leading-none">
                                             -{fmt(debt.amount ?? 0)}
                                         </p>
-                                        <div className="flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 rounded-md border border-amber-100/60">
-                                            <Clock size={10} className="text-amber-500" strokeWidth={2.5} />
-                                            <span className="text-[9px] font-black text-amber-500 uppercase tracking-tighter">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                                            <p className="text-[9px] font-black text-amber-500 uppercase tracking-wider">
                                                 Pending
-                                            </span>
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
                             ))}
                         </>
                     )}
-
                 </div>
             )}
         </div>

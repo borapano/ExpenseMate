@@ -81,8 +81,8 @@ const GroupDetails: React.FC = () => {
     }, [id]);
 
     const handleCopyInvite = () => {
-        if (group?.invite_code) {
-            navigator.clipboard.writeText(group.invite_code);
+        if (group?.code) {
+            navigator.clipboard.writeText(group.code);
             showToast("Invite code copied to clipboard!");
         }
     };
@@ -212,7 +212,7 @@ const GroupDetails: React.FC = () => {
                     <div className="relative z-10 w-full md:w-auto bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 flex flex-col gap-1 items-start md:items-end">
                         <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Invite Code</span>
                         <div className="flex items-center gap-3">
-                            <span className="font-black text-2xl tracking-[0.2em] text-accent">{group.invite_code}</span>
+                            <span className="font-black text-2xl tracking-[0.2em] text-accent">{group.code}</span>
                             <button onClick={handleCopyInvite} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-all group" title="Copy Code">
                                 <Copy size={16} className="group-active:scale-95 group-active:text-accent transition-transform" />
                             </button>

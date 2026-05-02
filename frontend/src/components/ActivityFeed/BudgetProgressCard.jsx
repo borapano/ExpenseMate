@@ -2,13 +2,22 @@ import React from 'react';
 import { CreditCard } from 'lucide-react';
 
 const BudgetProgressCard = ({ spentAmount, totalBudget }) => {
-    const budgetPct = Math.round((spentAmount / totalBudget) * 100);
+    // Guard kundër pjesëtimit me 0
+    const safeBudget = Number(totalBudget) > 0 ? Number(totalBudget) : 0;
+    const safeSpent = Number(spentAmount) || 0;
 
-    // Përcaktimi i ngjyrës së bar-it bazuar në përqindjen
+    // Përqindja reale (mund të kalojë 100%)
+    const budgetPct = safeBudget > 0
+        ? Math.round((safeSpent / safeBudget) * 100)
+        : 0;
+
+    // Width-i i bar-it kufizohet në 100% (fizikisht s'mund të kalojë)
+    const barWidth = Math.min(100, budgetPct);
+
     const getBarColor = (pct) => {
-        if (pct > 80) return '#EF4444'; // Kuqe (Rrezik)
-        if (pct > 60) return '#FFC570'; // Portokalli (Kujdes)
-        return '#1A3263'; // Blu (Normal)
+        if (pct >= 100) return '#EF4444';   // 100%+ → e kuqe
+        if (pct >= 76) return '#F59E0B';    // 76-99% → amber-500 (si "Awaiting Confirmation")
+        return '#1A3263';                    // 0-75% → navy (default)
     };
 
     return (
@@ -17,7 +26,9 @@ const BudgetProgressCard = ({ spentAmount, totalBudget }) => {
                 <span className="text-[10px] font-black uppercase tracking-widest text-secondary/60">
                     Budget Progress
                 </span>
-                <CreditCard size={16} className="text-primary" />
+                <div className="w-8 h-8 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
+                    <CreditCard size={16} />
+                </div>
             </div>
 
             <p className="text-2xl font-black text-primary">{budgetPct}%</p>
@@ -26,14 +37,14 @@ const BudgetProgressCard = ({ spentAmount, totalBudget }) => {
                 <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{
-                        width: `${budgetPct}%`,
+                        width: `${barWidth}%`,
                         background: getBarColor(budgetPct),
                     }}
                 />
             </div>
 
             <p className="text-[10px] text-secondary/60 font-semibold">
-                €{spentAmount.toLocaleString('en')} / €{totalBudget.toLocaleString('en')}
+                €{safeSpent.toLocaleString('en')} / €{safeBudget.toLocaleString('en')}
             </p>
         </div>
     );

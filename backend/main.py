@@ -255,54 +255,189 @@ def get_my_expenses(
         ).all():
             specific_pending_map[(str(s.expense_id), str(s.sender_id))] = s
 
-    formatted_items = []
-    
+    # Fetch ALL participants for each expense (for the participants column)
+    all_participants_map = {}  # expense_id -> list of all ExpenseParticipant + User
+    if expense_ids:
+        all_eps = db.query(models.ExpenseParticipant).options(
+            joinedload(models.ExpenseParticipant.user)
+        ).filter(
+            models.ExpenseParticipant.expense_id.in_(expense_ids)
+        ).all()
+        for ep in all_eps:
+            eid = str(ep.expense_id)
+            if eid not in all_participants_map:
+                all_participants_map[eid] = []
+            all_participants_map[eid].append(ep)
+
+    # Group shares by expense_id
+    # Key: expense_id → {exp, shares: [ep, ...]}
+    expenses_map = {}
     for ep, exp in shares:
-        is_debtor = ep.user_id == current_user.id
-        amount = float(ep.share_amount)
+        eid = str(exp.id)
+        if eid not in expenses_map:
+            expenses_map[eid] = {"exp": exp, "shares": []}
+        expenses_map[eid]["shares"].append(ep)
+
+    formatted_items = []
+
+    for eid, data in expenses_map.items():
+        exp = data["exp"]
+        participants = data["shares"]  # shares that involve current_user
+        current_user_str = str(current_user.id)
+
+        # Determine if current_user is payer (creditor) or debtor
+        is_payer = str(exp.payer_id) == current_user_str
+
+        if is_payer:
+            # TI je payer — llogarit balancën agregate nga të gjithë debtor-ët
+            to_be_paid = 0.0     # aktive, pa paguar
+            waiting = 0.0        # ka dërguar settlement PENDING
+            all_issued = True    # true nëse të gjithë janë settled
+
+            for ep in participants:
+                ep_user_str = str(ep.user_id)
+                amount = float(ep.share_amount)
+                specific = specific_pending_map.get((eid, ep_user_str))
+
+                if ep.is_settled:
+                    pass  # issued, nuk ndikon në balancë
+                elif specific:
+                    waiting += amount
+                    all_issued = False
+                else:
+                    to_be_paid += amount
+                    all_issued = False
+
+            # Aggregate status
+            if all_issued:
+                agg_status = "CONFIRMED"
+                user_balance = 0.0
+                to_be_paid_out = 0.0
+                waiting_out = 0.0
+            elif waiting > 0 and to_be_paid > 0:
+                agg_status = "MIXED"
+                user_balance = to_be_paid + waiting
+                to_be_paid_out = to_be_paid
+                waiting_out = waiting
+            elif waiting > 0:
+                agg_status = "WAITING_CONFIRMATION"
+                user_balance = waiting
+                to_be_paid_out = 0.0
+                waiting_out = waiting
+            else:
+                agg_status = "NONE"
+                user_balance = to_be_paid
+                to_be_paid_out = to_be_paid
+                waiting_out = 0.0
+
+        else:
+            # TI je debtor — shiko statusin tënd
+            ep = participants[0]  # vetëm share-ja jote
+            amount = float(ep.share_amount)
+            specific = specific_pending_map.get((eid, current_user_str))
+            to_be_paid_out = 0.0
+            waiting_out = 0.0
+
+            if ep.is_settled:
+                agg_status = "CONFIRMED"
+                user_balance = 0.0
+            elif specific:
+                agg_status = "PENDING"
+                user_balance = -amount
+            else:
+                agg_status = "NONE"
+                user_balance = -amount
+
+        # Build participants list for modal (ALL participants including payer if has share)
+        all_eps_for_expense = all_participants_map.get(eid, [])
         
+        # Check if payer has a share in this expense
+        payer_id_str = str(exp.payer_id) if exp.payer_id else ""
+        payer_has_share = any(str(ep.user_id) == payer_id_str for ep in all_eps_for_expense)
+        
+        # my_share: the current user's share amount in this expense (0 if not participant)
+        my_share_ep = next((ep for ep in all_eps_for_expense if str(ep.user_id) == current_user_str), None)
+        my_share = float(my_share_ep.share_amount) if my_share_ep else 0.0
+
+        def get_participant_status(ep_item):
+            ep_uid = str(ep_item.user_id)
+            # Status is shown only if this participant has a direct relationship with current_user
+            if is_payer:
+                # I am payer — show status for all (they all owe me)
+                if ep_item.is_settled:
+                    return "CONFIRMED"
+                s = specific_pending_map.get((eid, ep_uid))
+                if s:
+                    return "PENDING"
+                return "NONE"
+            else:
+                # I am debtor — show status only for myself
+                if ep_uid == current_user_str:
+                    if ep_item.is_settled:
+                        return "CONFIRMED"
+                    s = specific_pending_map.get((eid, ep_uid))
+                    if s:
+                        return "PENDING"
+                    return "NONE"
+                else:
+                    return None  # No status for other participants
+
+        participants_list = sorted([
+            {
+                "user_id": str(ep.user_id),
+                "user_name": ep.user.name if ep.user else "Unknown",
+                "amount": float(ep.share_amount),
+                "is_settled": ep.is_settled,
+                "is_payer": str(ep.user_id) == payer_id_str,
+                "is_me": str(ep.user_id) == current_user_str,
+                "status": get_participant_status(ep)
+            }
+            for ep in all_eps_for_expense
+        ], key=lambda x: x["user_name"])
+
+        # Add payer as entry if payer has NO share (paid only for others)
+        if not payer_has_share and exp.payer:
+            participants_list.insert(0, {
+                "user_id": payer_id_str,
+                "user_name": exp.payer.name,
+                "amount": 0.0,
+                "is_settled": True,
+                "is_payer": True,
+                "is_me": payer_id_str == current_user_str,
+                "status": "PAYER"  # special tag — paid but has no share
+            })
+
+        # Preview: first 2 names alphabetically (exclude payer-only entry)
+        preview_names = [p["user_name"] for p in participants_list if not (p["is_payer"] and p["amount"] == 0.0)][:2]
+
         f = {
-            "id": str(exp.id) + "-" + str(ep.user_id),
-            "expense_id": str(exp.id),
+            "id": eid,
+            "expense_id": eid,
             "group_id": str(exp.group_id),
             "group_name": exp.group.name if exp.group else "Personal",
             "description": exp.description,
             "category": exp.category,
-            "amount": amount,
-            "user_balance": -amount if is_debtor else amount,
+            "amount": float(sum(float(ep.share_amount) for ep in participants)),
+            "total_amount": float(exp.amount),
+            "user_balance": user_balance,
             "expense_date": exp.expense_date.isoformat() if exp.expense_date else "",
             "created_date": exp.created_date.isoformat() if exp.created_date else "",
             "payer_name": exp.payer.name if exp.payer else "Unknown",
             "payer_id": str(exp.payer_id) if exp.payer_id else "",
-            "transaction_status": "NONE"
+            "transaction_status": agg_status,
+            "to_be_paid": to_be_paid_out,
+            "waiting_amount": waiting_out,
+            "my_share": my_share,
+            "participants": participants_list,
+            "participants_preview": preview_names,
+            "is_payer": is_payer
         }
-
-        expense_id_str = str(exp.id)
-        current_user_str = str(current_user.id)
-        ep_user_str = str(ep.user_id)
-
-        if is_debtor:
-            # PENDING: kam dërguar settlement për këtë expense specifike
-            specific = specific_pending_map.get((expense_id_str, current_user_str))
-            if specific:
-                f["transaction_status"] = "PENDING"
-                f["pending_settlement_id"] = str(specific.id)
-        else:
-            # WAITING_CONFIRMATION: debtor-i ka dërguar settlement për këtë expense specifike
-            specific = specific_pending_map.get((expense_id_str, ep_user_str))
-            if specific:
-                f["transaction_status"] = "WAITING_CONFIRMATION"
-                f["pending_settlement_id"] = str(specific.id)
-
-        if f["transaction_status"] == "NONE":
-            if ep.is_settled:
-                f["transaction_status"] = "CONFIRMED"
 
         formatted_items.append(f)
 
     # Sort all items chronologically (newest first)
     formatted_items.sort(key=lambda x: x["created_date"] or x["expense_date"], reverse=True)
-    
+
     paginated_items = formatted_items[offset:offset+limit]
 
     return {"expenses": paginated_items, "total": len(formatted_items)}

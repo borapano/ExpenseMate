@@ -12,11 +12,12 @@ const renderActiveShape = (props) => {
     cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value,
   } = props;
   if (!payload || !payload.name) return null;
+  const displayName = payload.name.length > 10 ? payload.name.slice(0, 10) + '…' : payload.name;
   return (
     <g>
       {/* Deep Navy (#1A3263) për emrin e grupit */}
       <text x={cx} y={cy - 10} textAnchor="middle" fill="#1A3263" fontSize={13} fontWeight={700}>
-        {payload.name}
+        {displayName}
       </text>
       {/* Muted Blue (#547792) për vlerën */}
       <text x={cx} y={cy + 12} textAnchor="middle" fill="#547792" fontSize={12} fontWeight={600}>

@@ -1,27 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-    Search, Filter, ChevronDown, ChevronUp, Check, Activity,
+    Search, Filter, ChevronDown, ChevronUp, Check, Activity, X,
     Utensils, ShoppingBasket, Car, Home, Zap, Film,
-    ShoppingCart, Plane, Heart, FileText, Tag
+    ShoppingCart, Plane, Heart, FileText, Tag, Users
 } from 'lucide-react';
-
-/*
- * ExpenseHistoryCard — The Source of Truth (Universal Ledger).
- *
- * Shows ALL expenses where the user is a participant or payer,
- * sorted newest → oldest.
- *
- * Status derivation uses the BACKEND `transaction_status` field:
- *
- *   "CONFIRMED" → "ISSUED" badge (settlement was confirmed, debt is closed)
- *   "PENDING"   → "In Verification" badge (settlement sent, awaiting V/X)
- *   "NONE"      → derive from user_balance:
- *                    balance < 0  → "-€X (To Pay)"      — I owe
- *                    balance > 0  → "+€X (To Be Paid)"  — I'm owed
- *                    balance == 0 → "ISSUED"             — edge case, no debt
- *
- * The frontend NEVER derives status independently — it trusts the backend.
- */
 
 interface Props {
     filteredExpenses: any[];
@@ -58,7 +40,7 @@ const CAT: Record<string, { icon: React.ReactNode; bg: string; text: string }> =
 const getCat = (c?: string) =>
     CAT[c ?? ''] ?? { icon: <Tag size={14} />, bg: 'bg-gray-100', text: 'text-gray-600' };
 
-// ── Formatter ──────────────────────────────────────────────────────────────
+// ── Formatters ─────────────────────────────────────────────────────────────
 const fmt = (v: number) =>
     `$${Math.abs(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -71,30 +53,29 @@ const fmtDate = (raw?: string) => {
 };
 
 // ── Status badge renderer ──────────────────────────────────────────────────
-function renderStatus(expense: any, userId: string) {
+function renderStatus(expense: any) {
     const txStatus = expense?.transaction_status ?? 'NONE';
     const balance = Number(expense?.user_balance ?? 0);
 
-    // ISSUED — borxhi është shlyer ose nuk ka asnjë detyrim
     if (txStatus === 'CONFIRMED' || (balance === 0 && txStatus === 'NONE')) {
         return (
             <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-secondary/5 border border-secondary/10 text-[10px] font-black text-secondary/40 uppercase tracking-wider">
-                ISSUED
+                SETTLED
             </span>
         );
     }
 
-    // PENDING — ti ke dërguar pagesë, pret konfirmim prej tyre
+    // Debtor sent payment — awaiting confirmation
     if (txStatus === 'PENDING') {
         return (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 border border-amber-100 text-[11px] font-black text-amber-500 uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                {fmt(Math.abs(balance))} Pending
+                -{fmt(balance)} Pending
             </span>
         );
     }
 
-    // WAITING_CONFIRMATION — dikush të ka dërguar ty pagesë, pret konfirmimin tënd
+    // Someone sent payment to me — awaiting my confirmation
     if (txStatus === 'WAITING_CONFIRMATION') {
         return (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 border border-blue-100 text-[11px] font-black text-blue-500 uppercase tracking-wider">
@@ -104,11 +85,27 @@ function renderStatus(expense: any, userId: string) {
         );
     }
 
-    // NONE — aktiv, pa asnjë settlement
+    // Mixed: some to be paid + some waiting
+    if (txStatus === 'MIXED') {
+        const toBeP = expense?.to_be_paid ?? balance;
+        const waiting = expense?.waiting_amount ?? 0;
+        return (
+            <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">
+                    +{fmt(toBeP)} To Be Paid
+                </span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-black text-blue-500 uppercase tracking-wider">
+                    <span className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" />
+                    +{fmt(waiting)} Waiting
+                </span>
+            </div>
+        );
+    }
+
     if (balance < -0.005) {
         return (
             <span className="text-[11px] font-black text-red-600 uppercase tracking-wider">
-                -{fmt(Math.abs(balance))} To Pay
+                -{fmt(balance)} To Pay
             </span>
         );
     }
@@ -122,7 +119,100 @@ function renderStatus(expense: any, userId: string) {
     }
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+// ── Participant status badge (inside modal) ────────────────────────────────
+function participantStatusBadge(p: any, expenseIsPayer: boolean) {
+    // Payer-only entry (no share)
+    if (p.status === 'PAYER') {
+        return <span className="text-[9px] font-black text-primary/40 uppercase tracking-wider px-2 py-0.5 bg-primary/5 rounded">Payer</span>;
+    }
+    // No relationship with current user → no badge
+    if (p.status === null || p.status === undefined) {
+        return null;
+    }
+    // Current user is payer → their own share is always settled (they paid)
+    if (expenseIsPayer && p.is_me) {
+        return <span className="text-[9px] font-black text-secondary/40 uppercase tracking-wider px-2 py-0.5 bg-secondary/5 rounded">Settled</span>;
+    }
+    if (p.is_settled || p.status === 'CONFIRMED') {
+        return <span className="text-[9px] font-black text-secondary/40 uppercase tracking-wider px-2 py-0.5 bg-secondary/5 rounded">Settled</span>;
+    }
+    if (p.status === 'PENDING') {
+        return (
+            <span className="inline-flex items-center gap-1 text-[9px] font-black text-amber-500 uppercase tracking-wider px-2 py-0.5 bg-amber-50 rounded border border-amber-100">
+                <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse" /> Pending
+            </span>
+        );
+    }
+    return <span className="text-[9px] font-black text-red-500 uppercase tracking-wider px-2 py-0.5 bg-red-50 rounded border border-red-100">To Pay</span>;
+}
+
+// ── Participants Modal ─────────────────────────────────────────────────────
+const ParticipantsModal: React.FC<{ expense: any; onClose: () => void }> = ({ expense, onClose }) => {
+    const rawParticipants: any[] = expense?.participants ?? [];
+    const isPayer: boolean = expense?.is_payer ?? false;
+
+    // Sort: "You" first, then alphabetically
+    const participants = [...rawParticipants].sort((a, b) => {
+        if (a.is_me) return -1;
+        if (b.is_me) return 1;
+        return (a.user_name ?? '').localeCompare(b.user_name ?? '');
+    });
+
+    return (
+        <div
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="px-6 py-4 flex items-center justify-between border-b border-secondary/10">
+                    <div className="flex flex-col min-w-0">
+                        <h3 className="text-[11px] font-black uppercase tracking-widest text-primary/70">
+                            Participants
+                        </h3>
+                        <p className="text-[10px] font-semibold text-secondary/40 truncate mt-0.5">
+                            {expense?.description ?? 'Expense'} · {expense?.group_name ?? ''}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 text-secondary/40 hover:text-primary rounded-lg transition-colors shrink-0">
+                        <X size={16} />
+                    </button>
+                </div>
+
+                {/* List */}
+                <div className="px-6 py-4 flex flex-col gap-2.5 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                    {participants.length === 0 ? (
+                        <p className="text-sm text-secondary/40 font-semibold text-center py-6">No participants found.</p>
+                    ) : participants.map((p: any) => (
+                        <div key={p.user_id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-full bg-primary/5 flex items-center justify-center text-primary/40 text-[9px] font-black shrink-0">
+                                    {p.is_me ? 'Y' : (p.user_name ?? 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                    <span className="text-sm font-bold text-primary truncate">
+                                        {p.is_me ? 'You' : (p.user_name ?? 'Unknown')}
+                                    </span>
+                                    {p.amount > 0 && (
+                                        <span className="text-[10px] font-semibold text-secondary/40">
+                                            ${Number(p.amount).toFixed(2)}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            {participantStatusBadge(p, isPayer)}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── Main Component ─────────────────────────────────────────────────────────
 const ExpenseHistoryCard: React.FC<Props> = ({
     filteredExpenses,
     searchQuery, setSearchQuery,
@@ -133,11 +223,11 @@ const ExpenseHistoryCard: React.FC<Props> = ({
     onSeeMore, onSeeLess,
     historyRef, user,
 }) => {
+    const [modalExpense, setModalExpense] = useState<any | null>(null);
+
     const items = Array.isArray(filteredExpenses) ? filteredExpenses : [];
     const visible = items.slice(0, visibleCount);
     const uid = String(user?.id ?? '').toLowerCase();
-
-    console.log("Component Data (ExpenseHistoryCard):", { filteredExpenses, visible });
 
     return (
         <div ref={historyRef} className="bg-white rounded-2xl shadow-sm border border-secondary/10 flex flex-col hover:shadow-md transition-shadow mt-2">
@@ -145,7 +235,7 @@ const ExpenseHistoryCard: React.FC<Props> = ({
             {/* ── Header ── */}
             <div className="px-6 py-5 border-b border-secondary/10 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
                 <h2 className="text-[10px] font-black uppercase tracking-widest text-primary/70 shrink-0">
-                    Unified Feed ({filteredExpenses?.length || 0})
+                    Transaction History ({filteredExpenses?.length || 0})
                 </h2>
 
                 <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -161,7 +251,7 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                         />
                     </div>
 
-                    {/* Group filter dropdown */}
+                    {/* Group filter */}
                     <div className="relative">
                         <button
                             type="button"
@@ -181,9 +271,7 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                                         key={grp.id ?? 'all'}
                                         type="button"
                                         onClick={() => { setSelectedGroup(grp); setIsFilterOpen(false); }}
-                                        className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold ${selectedGroup.id === grp.id
-                                            ? 'bg-primary/5 text-primary'
-                                            : 'hover:bg-gray-50 text-secondary'
+                                        className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold ${selectedGroup.id === grp.id ? 'bg-primary/5 text-primary' : 'hover:bg-gray-50 text-secondary'
                                             }`}
                                     >
                                         <span className="truncate">{grp.name}</span>
@@ -206,15 +294,17 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                 ) : (
                     <table className="w-full text-left border-collapse table-fixed">
                         <colgroup>
-                            <col style={{ width: '15%' }} />
-                            <col style={{ width: '35%' }} />
-                            <col style={{ width: '20%' }} />
-                            <col style={{ width: '30%' }} />
+                            <col style={{ width: '16.66%' }} />
+                            <col style={{ width: '16.66%' }} />
+                            <col style={{ width: '16.66%' }} />
+                            <col style={{ width: '16.66%' }} />
+                            <col style={{ width: '16.66%' }} />
+                            <col style={{ width: '16.70%' }} />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-secondary/10 bg-secondary/[0.02]">
-                                {['Date', 'Expense & Group', 'Payer', 'Status'].map(h => (
-                                    <th key={h} className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-secondary/40 text-left">
+                                {['Date', 'Expense & Group', 'Payer', 'Participants', 'My Share', 'Status'].map(h => (
+                                    <th key={h} className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-secondary/40 text-left">
                                         {h}
                                     </th>
                                 ))}
@@ -225,23 +315,22 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                                 if (!expense) return null;
 
                                 const isPayer = String(expense.payer_id ?? '').toLowerCase() === uid;
-                                const participants: any[] = expense.participants ?? [];
-                                const myPart = participants.find(
-                                    (p: any) => String(p.user_id ?? '').toLowerCase() === uid
-                                );
                                 const catStyle = getCat(expense.category);
+                                const preview: string[] = expense.participants_preview ?? [];
+                                const hasParticipants = (expense.participants ?? []).length > 0;
 
                                 return (
                                     <tr key={expense.id} className="hover:bg-secondary/[0.015] transition-colors h-[66px]">
+
                                         {/* Date */}
-                                        <td className="px-5 py-2 align-middle">
+                                        <td className="px-4 py-2 align-middle">
                                             <span className="text-sm font-bold text-primary/80 whitespace-nowrap">
                                                 {fmtDate(expense.created_date ?? expense.expense_date)}
                                             </span>
                                         </td>
 
                                         {/* Description + Group */}
-                                        <td className="px-5 py-2 align-middle overflow-hidden">
+                                        <td className="px-4 py-2 align-middle overflow-hidden">
                                             <div className="flex items-center gap-2.5 min-w-0">
                                                 <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${catStyle.bg} ${catStyle.text}`}>
                                                     {catStyle.icon}
@@ -258,7 +347,7 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                                         </td>
 
                                         {/* Payer */}
-                                        <td className="px-5 py-2 align-middle overflow-hidden">
+                                        <td className="px-4 py-2 align-middle overflow-hidden">
                                             <div className="flex items-center gap-1.5">
                                                 <div className="w-5 h-5 rounded-full bg-primary/5 flex items-center justify-center text-primary/40 text-[9px] font-black shrink-0">
                                                     {isPayer ? 'Y' : (expense.payer_name ?? 'U').charAt(0).toUpperCase()}
@@ -269,12 +358,62 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                                             </div>
                                         </td>
 
-                                        {/* Status — derived from backend transaction_status */}
-                                        <td className="px-5 py-2 align-middle overflow-hidden">
+                                        {/* Participants */}
+                                        <td className="px-4 py-2 align-middle overflow-hidden">
+                                            {hasParticipants ? (
+                                                <button
+                                                    onClick={() => setModalExpense(expense)}
+                                                    className="flex items-center gap-1.5 group"
+                                                    title="View all participants"
+                                                >
+                                                    <div className="w-5 h-5 rounded-full bg-primary/5 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
+                                                        <Users size={10} className="text-primary/40" />
+                                                    </div>
+                                                    <div className="flex flex-col items-start min-w-0">
+                                                        <span className="text-[11px] font-bold text-secondary/60 truncate group-hover:text-primary/70 transition-colors">
+                                                            {(() => {
+                                                                const allP: any[] = expense.participants ?? [];
+                                                                const meP = allP.find((p: any) => p.is_me && p.status !== 'PAYER');
+                                                                const others = allP.filter((p: any) => !p.is_me && p.status !== 'PAYER');
+                                                                const sorted = meP ? ['You', ...others.slice(0, 1).map((p: any) => p.user_name)] : others.slice(0, 2).map((p: any) => p.user_name);
+                                                                return sorted.length > 0 ? sorted.join(', ') : '—';
+                                                            })()}
+                                                        </span>
+                                                        {(expense.participants ?? []).filter((p: any) => p.status !== 'PAYER').length > 2 && (
+                                                            <span className="text-[9px] font-semibold text-secondary/30">
+                                                                +{(expense.participants ?? []).filter((p: any) => p.status !== 'PAYER').length - 2} more
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            ) : (
+                                                <span className="text-[11px] text-secondary/30">—</span>
+                                            )}
+                                        </td>
+
+                                        {/* My Share */}
+                                        <td className="px-4 py-2 align-middle overflow-hidden">
+                                            {(expense.my_share ?? 0) > 0 ? (
+                                                <div className="flex flex-col">
+                                                    <span className="text-[11px] font-black text-primary/70">
+                                                        ${Number(expense.my_share).toFixed(2)}
+                                                    </span>
+                                                    <span className="text-[9px] font-semibold text-secondary/35">
+                                                        of ${Number(expense.total_amount ?? expense.amount ?? 0).toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[11px] text-secondary/30">—</span>
+                                            )}
+                                        </td>
+
+                                        {/* Status */}
+                                        <td className="px-4 py-2 align-middle overflow-hidden">
                                             <div className="flex items-center">
-                                                {renderStatus(expense, uid)}
+                                                {renderStatus(expense)}
                                             </div>
                                         </td>
+
                                     </tr>
                                 );
                             })}
@@ -286,23 +425,25 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                 {items.length > 5 && (
                     <div className="p-6 flex justify-center bg-gray-50/30 border-t border-secondary/5">
                         {visibleCount < items.length || hasMore ? (
-                            <button
-                                onClick={onSeeMore}
-                                className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm"
-                            >
+                            <button onClick={onSeeMore} className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm">
                                 See More <ChevronDown size={14} strokeWidth={3} />
                             </button>
                         ) : (
-                            <button
-                                onClick={onSeeLess}
-                                className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm"
-                            >
+                            <button onClick={onSeeLess} className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm">
                                 See Less <ChevronUp size={14} strokeWidth={3} />
                             </button>
                         )}
                     </div>
                 )}
             </div>
+
+            {/* ── Participants Modal ── */}
+            {modalExpense && (
+                <ParticipantsModal
+                    expense={modalExpense}
+                    onClose={() => setModalExpense(null)}
+                />
+            )}
         </div>
     );
 };

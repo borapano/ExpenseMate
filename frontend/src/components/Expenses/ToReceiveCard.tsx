@@ -1,11 +1,5 @@
 import React from 'react';
-import { TrendingUp, Clock } from 'lucide-react';
-
-/*
- * ToReceiveCard — Summary of money owed TO the current user.
- *
- * "Sum of others' shares in ExpenseParticipant where I am the expense.payer_id and is_settled == False."
- */
+import { TrendingUp } from 'lucide-react';
 
 interface Props {
     totalToReceive: number;
@@ -32,16 +26,17 @@ const ToReceiveCard: React.FC<Props> = ({ totalToReceive, pendingReceived }) => 
             </p>
         </div>
 
-        {pendingReceived > 0.005 && (
-            <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
-                <Clock size={14} className="text-amber-500 shrink-0" />
-                <div>
-                    <p className="text-[13px] font-black text-amber-600 leading-none">{fmt(pendingReceived)}</p>
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-amber-400 mt-0.5">
-                        Awaiting Your Confirmation
-                    </p>
-                </div>
+        {pendingReceived > 0.005 ? (
+            <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                <p className="text-[11px] font-black text-amber-500 tracking-wide">
+                    {fmt(pendingReceived)} Awaiting Your Confirmation
+                </p>
             </div>
+        ) : (
+            <p className="text-[11px] font-semibold text-secondary/30 tracking-wide">
+                No awaiting your confirmation
+            </p>
         )}
     </div>
 );

@@ -5,11 +5,10 @@ import { useData } from '../DataContext';
 import api from '../api';
 import { CreateGroupModal } from '../components/GroupModals';
 import {
-    LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut,
+    LayoutDashboard, Activity, CreditCard, Users, LogOut,
     ShieldCheck, AlertCircle
 } from 'lucide-react';
 
-// Importimi i komponentëve të rinj (Default Imports)
 import CreateGroupCard from '../components/Groups/CreateGroupCard';
 import JoinGroupCard from '../components/Groups/JoinGroupCard';
 import GroupCard from '../components/Groups/GroupCard';
@@ -104,7 +103,7 @@ const Groups: React.FC = () => {
             )}
 
             {/* ── SIDEBAR ── */}
-            <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0">
+            <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0 sticky top-0 h-screen">
                 <div className="p-8 flex items-center gap-3">
                     <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
                         <Users className="text-accent" size={20} />
@@ -117,7 +116,6 @@ const Groups: React.FC = () => {
                     <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
                     <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
                     <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
-                    <NavItem icon={<Settings size={19} />} label="Settings" to="/settings" />
                 </nav>
 
                 <div className="p-6 border-t border-white/5 mt-auto">
@@ -136,7 +134,7 @@ const Groups: React.FC = () => {
                 <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <h1 className="text-xl font-black text-primary tracking-tight">Groups</h1>
-                        <p className="text-sm text-secondary/70 font-semibold mt-0.5">Create, join and manage your shared hubs</p>
+                        <p className="text-sm text-secondary/70 font-semibold mt-0.5">Create, join and manage your expense groups</p>
                     </div>
                     <div className="flex items-center gap-3 bg-white p-1 pr-4 rounded-full shadow-sm border border-secondary/10">
                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-accent text-xs font-bold">
@@ -148,7 +146,7 @@ const Groups: React.FC = () => {
 
                 <div className="flex-1 overflow-y-auto px-8 pb-10 space-y-8 custom-scrollbar">
 
-                    {/* ── TOP SECTION: ACTION CARDS (EXTRACTED) ── */}
+                    {/* ── TOP SECTION: ACTION CARDS ── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <CreateGroupCard onClick={() => setIsCreateModalOpen(true)} />
 
@@ -162,7 +160,7 @@ const Groups: React.FC = () => {
 
                     {/* ── MAIN GRID: GROUP CARDS ── */}
                     <div>
-                        <h2 className="text-sm font-black text-secondary/70 uppercase tracking-widest mb-6 px-1">Your Active Hubs</h2>
+                        <h2 className="text-sm font-black text-secondary/70 uppercase tracking-widest mb-6 px-1">Your Groups</h2>
 
                         {groups.length === 0 ? (
                             <div className="bg-white rounded-[2rem] border border-dashed border-secondary/20 p-12 flex flex-col items-center justify-center text-center">
@@ -171,7 +169,7 @@ const Groups: React.FC = () => {
                                 </div>
                                 <h3 className="text-xl font-black text-primary mb-2">No Groups Yet</h3>
                                 <p className="text-secondary/70 max-w-md mx-auto mb-6">
-                                    You aren't a part of any expense groups. Create one to start splitting bills, or join an existing hub!
+                                    You aren't a part of any expense groups. Create one to start splitting bills, or join an existing group!
                                 </p>
                                 <button
                                     onClick={() => setIsCreateModalOpen(true)}

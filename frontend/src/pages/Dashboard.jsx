@@ -4,7 +4,7 @@ import api from '../api';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import {
-    LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut, Bell, CheckCircle
+    LayoutDashboard, Activity, CreditCard, Users, LogOut, CheckCircle, Clock
 } from 'lucide-react';
 
 import NetBalanceCard from '../components/NetBalanceCard';
@@ -61,8 +61,6 @@ const Dashboard = () => {
         monthly_data: spendingHistory.monthly_data
     }), [settlementDashboard, spendingHistory]);
 
-    console.log("Component Data (Dashboard):", { globalDebts, globalRequests, expectedPayments, stats });
-
     // Initial load is handled by DataContext
     useEffect(() => {
         refreshAllData();
@@ -105,7 +103,7 @@ const Dashboard = () => {
     return (
         <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
             {/* SIDEBAR */}
-            <aside className="w-64 bg-primary text-white flex flex-col hidden md:flex shrink-0">
+            <aside className="w-64 bg-primary text-white flex flex-col hidden md:flex shrink-0 sticky top-0 h-screen">
                 <div className="p-8 flex items-center gap-3">
                     <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
                         <Users className="text-accent" size={20} />
@@ -117,7 +115,6 @@ const Dashboard = () => {
                     <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
                     <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
                     <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
-                    <NavItem icon={<Settings size={19} />} label="Settings" to="/settings" />
                 </nav>
                 <div className="p-6 border-t border-white/5 mt-auto">
                     <button onClick={logout} className="flex items-center gap-3 text-secondary hover:text-white transition-colors w-full group text-sm font-bold uppercase tracking-widest">
@@ -134,7 +131,6 @@ const Dashboard = () => {
                         Dashboard: <span className="font-medium text-secondary text-base">Welcome back, {user?.name?.split(' ')[0] || 'User'} 👋</span>
                     </h2>
                     <div className="flex items-center gap-5">
-                        <button className="relative p-2 text-secondary hover:text-primary"><Bell size={22} /></button>
                         <div className="flex items-center gap-3 bg-white p-1 pr-4 rounded-full shadow-sm border border-secondary/10">
                             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-accent text-xs font-bold shadow-inner border border-white/10">
                                 {user?.name?.charAt(0).toUpperCase() || 'U'}

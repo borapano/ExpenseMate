@@ -20,7 +20,7 @@ interface Group {
     id: string;
     name: string;
     description: string;
-    invite_code: string;
+    code: string;
     net_balance?: number;
     total_spending?: number;
     members?: any[];

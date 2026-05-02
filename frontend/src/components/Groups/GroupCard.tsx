@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, Minus, Crown, Users as UsersIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../AuthContext';
 
 interface GroupParticipant {
     user_id: string;
@@ -12,64 +13,141 @@ interface GroupCardProps {
         id: string;
         name: string;
         description: string;
-        invite_code: string;
+        code: string;
         total_spending?: number;
         net_balance?: number;
         members?: GroupParticipant[];
+        creator_id?: string;
     };
 }
 
 const GroupCard: React.FC<GroupCardProps> = ({ group }) => {
     const navigate = useNavigate();
-    const netBal = Number(group.net_balance || 0);
+    const { user: currentUser } = useAuth();
+
+    const balance = Number(group.net_balance || 0);
+    const isOwed = balance > 0.01;
+    const isOwing = balance < -0.01;
+    const isSettled = !isOwed && !isOwing;
+
     const members = group.members || [];
+    const isAdmin = String(group.creator_id) === String(currentUser?.id);
+
+    const formattedBalance = Math.abs(balance).toLocaleString('de-DE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
 
     return (
         <div
             onClick={() => navigate(`/groups/${group.id}`)}
-            className="bg-white/80 p-6 rounded-2xl shadow-sm border border-secondary/10 flex flex-col hover:scale-105 hover:bg-white hover:shadow-lg transition-all duration-300 cursor-pointer group"
+            className="bg-white rounded-2xl border border-secondary/10 shadow-sm flex flex-col overflow-hidden cursor-pointer hover:shadow-md hover:border-secondary/20 transition-all duration-200 group"
         >
-            <div className="flex justify-between items-start mb-4">
-                <div className="flex-1 pr-2">
-                    <h3 className="text-lg font-black text-primary truncate" title={group.name}>{group.name}</h3>
-                    {group.description && (
-                        <p className="text-xs text-secondary/60 font-semibold line-clamp-1 mt-1">
+            {/* Top bar accent */}
+            <div className="h-1 bg-primary w-full" />
+
+            <div className="p-6 flex flex-col flex-1 gap-4">
+
+                {/* Row 1: Role badge + Invite code */}
+                <div className="flex items-center justify-between">
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-full border ${isAdmin
+                        ? 'bg-amber-50 border-amber-200/60'
+                        : 'bg-secondary/5 border-secondary/10'
+                        }`}>
+                        {isAdmin ? (
+                            <>
+                                <Crown size={9} className="text-amber-500 fill-amber-400/20" strokeWidth={2.5} />
+                                <span className="text-[8px] font-black uppercase tracking-wider text-amber-500">Admin</span>
+                            </>
+                        ) : (
+                            <>
+                                <UsersIcon size={9} className="text-secondary/40" strokeWidth={2.5} />
+                                <span className="text-[8px] font-black uppercase tracking-wider text-secondary/40">Member</span>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="shrink-0 px-2.5 py-1 bg-primary/5 rounded-lg">
+                        <span className="text-[10px] font-black text-primary/40 tracking-widest uppercase">
+                            {group.code}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Row 2: Name + Description */}
+                <div>
+                    <h3
+                        className="text-base font-black text-primary truncate tracking-tight group-hover:text-accent transition-colors"
+                        title={group.name}
+                    >
+                        {group.name}
+                    </h3>
+                    {group.description ? (
+                        <p className="text-[11px] text-secondary/50 font-semibold line-clamp-1 mt-0.5">
                             {group.description}
+                        </p>
+                    ) : (
+                        <p className="text-[11px] text-secondary/30 font-semibold mt-0.5 italic">
+                            No description
                         </p>
                     )}
                 </div>
-                <div className="w-8 h-8 rounded-full bg-[#F7F4F0] flex items-center justify-center text-[10px] font-black text-primary/40 shrink-0">
-                    {group.invite_code}
+
+                {/* Row 3: Members avatars */}
+                <div className="flex items-center gap-2">
+                    <div className="flex -space-x-2">
+                        {members.slice(0, 5).map((m, idx) => (
+                            <div
+                                key={idx}
+                                className="w-7 h-7 rounded-full border-2 border-white bg-primary/10 flex items-center justify-center text-[9px] font-black text-primary shadow-sm"
+                                title={m.user_name}
+                            >
+                                {m.user_name.charAt(0).toUpperCase()}
+                            </div>
+                        ))}
+                        {members.length > 5 && (
+                            <div className="w-7 h-7 rounded-full border-2 border-white bg-primary text-white flex items-center justify-center text-[9px] font-black shadow-sm">
+                                +{members.length - 5}
+                            </div>
+                        )}
+                    </div>
+                    <span className="text-[10px] font-semibold text-secondary/40">
+                        {members.length} {members.length === 1 ? 'member' : 'members'}
+                    </span>
                 </div>
-            </div>
-            <div className="flex-1 grid grid-cols-2 gap-4 bg-[#F7F4F0] p-4 rounded-xl mt-2 mb-5">
-                <div>
-                    <p className="text-[10px] font-black text-secondary/50 uppercase tracking-widest mb-1">Total Spent</p>
-                    <p className="font-bold text-sm text-primary">€{Number(group.total_spending || 0).toFixed(2)}</p>
+
+                {/* Row 4: Balance footer */}
+                <div className="pt-3 border-t border-secondary/8 flex items-center justify-between mt-auto">
+                    <div>
+                        <span className="text-[8px] font-black uppercase text-secondary/40 tracking-wider block">
+                            Your Balance
+                        </span>
+                        <span className={`text-xs font-black mt-0.5 block ${isOwed ? 'text-emerald-600' : isOwing ? 'text-red-500' : 'text-secondary/40'
+                            }`}>
+                            {isSettled
+                                ? 'Settled Up'
+                                : isOwed
+                                    ? `You are owed €${formattedBalance}`
+                                    : `You owe €${formattedBalance}`
+                            }
+                        </span>
+                    </div>
+
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm ${isOwed
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : isSettled
+                            ? 'bg-secondary/5 text-secondary/30'
+                            : 'bg-red-50 text-red-500'
+                        }`}>
+                        {isOwed
+                            ? <ArrowUpRight size={16} strokeWidth={2.5} />
+                            : isSettled
+                                ? <Minus size={16} strokeWidth={2.5} />
+                                : <ArrowDownLeft size={16} strokeWidth={2.5} />
+                        }
+                    </div>
                 </div>
-                <div>
-                    <p className="text-[10px] font-black text-secondary/50 uppercase tracking-widest mb-1">Your Net Bal</p>
-                    <p className={`font-black text-base ${netBal > 0 ? 'text-emerald-500' : netBal < 0 ? 'text-danger' : 'text-primary'}`}>
-                        {netBal > 0 ? '+' : ''}{netBal.toFixed(2)}€
-                    </p>
-                </div>
-            </div>
-            <div className="flex items-center justify-between mt-auto">
-                <div className="flex -space-x-2">
-                    {members.slice(0, 4).map((m, idx) => (
-                        <div key={idx} className="w-8 h-8 rounded-full border-2 border-white bg-secondary/10 flex items-center justify-center text-[10px] font-bold text-primary shadow-sm" title={m.user_name}>
-                            {m.user_name.charAt(0).toUpperCase()}
-                        </div>
-                    ))}
-                    {members.length > 4 && (
-                        <div className="w-8 h-8 rounded-full border-2 border-white bg-primary text-white flex items-center justify-center text-[10px] font-bold shadow-sm">
-                            +{members.length - 4}
-                        </div>
-                    )}
-                </div>
-                <span className="text-xs font-bold text-accent group-hover:underline flex items-center gap-1">
-                    View Details <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                </span>
+
             </div>
         </div>
     );

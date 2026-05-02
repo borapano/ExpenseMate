@@ -1,11 +1,5 @@
 import React from 'react';
-import { TrendingDown, Clock } from 'lucide-react';
-
-/*
- * ToPayCard — Summary of money the current user OWES.
- *
- * "Sum of my shares in ExpenseParticipant where is_settled == False."
- */
+import { TrendingDown } from 'lucide-react';
 
 interface Props {
     totalToPay: number;
@@ -32,16 +26,17 @@ const ToPayCard: React.FC<Props> = ({ totalToPay, pendingSent }) => (
             </p>
         </div>
 
-        {pendingSent > 0.005 && (
-            <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
-                <Clock size={14} className="text-amber-500 shrink-0" />
-                <div>
-                    <p className="text-[13px] font-black text-amber-600 leading-none">{fmt(pendingSent)}</p>
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-amber-400 mt-0.5">
-                        Pending Confirmation
-                    </p>
-                </div>
+        {pendingSent > 0.005 ? (
+            <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                <p className="text-[11px] font-black text-amber-500 tracking-wide">
+                    {fmt(pendingSent)} Pending Confirmation
+                </p>
             </div>
+        ) : (
+            <p className="text-[11px] font-semibold text-secondary/30 tracking-wide">
+                No pending confirmation
+            </p>
         )}
     </div>
 );

@@ -1,12 +1,15 @@
 import React from 'react';
-import { Wallet, TrendingUp } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const TotalSpentCard = ({ amount, previousMonthAmount }) => {
-    // Formatimi i vlerës monetare
     const formattedAmount = `€${amount.toLocaleString('en', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     })}`;
+
+    const diff = amount - (previousMonthAmount ?? 0);
+    const isHigher = diff > 0.005;
+    const isLower = diff < -0.005;
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-secondary/10 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow duration-200">
@@ -24,8 +27,9 @@ const TotalSpentCard = ({ amount, previousMonthAmount }) => {
             </p>
 
             {previousMonthAmount != null && (
-                <p className="text-xs text-secondary/70 font-semibold flex items-center gap-1">
-                    <TrendingUp size={12} className="text-emerald-500" />
+                <p className={`text-xs font-semibold flex items-center gap-1 ${isHigher ? 'text-red-500' : isLower ? 'text-emerald-500' : 'text-secondary/50'
+                    }`}>
+                    {isHigher ? <TrendingUp size={12} /> : isLower ? <TrendingDown size={12} /> : <Minus size={12} />}
                     {`VS €${previousMonthAmount.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Last Month`}
                 </p>
             )}

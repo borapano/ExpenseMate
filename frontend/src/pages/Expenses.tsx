@@ -5,7 +5,7 @@ import api from '../api';
 import { useData } from '../DataContext';
 import {
     LayoutDashboard, Activity, CreditCard, Users, Settings, LogOut,
-    Bell, ShieldCheck, AlertCircle
+    ShieldCheck, AlertCircle
 } from 'lucide-react';
 
 import {
@@ -78,10 +78,17 @@ const Expenses: React.FC = () => {
     const [selectedGroup, setSelectedGroup] = useState<{ id: string | null; name: string }>({ id: null, name: 'All Groups' });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [visibleCount, setVisibleCount] = useState(5);
+
+    // When group filter changes → reset pagination
+    const handleSetSelectedGroup = (grp: { id: string | null; name: string }) => {
+        setSelectedGroup(grp);
+        setVisibleCount(5);
+        realOffset.current = 0;
+    };
     const [payingDebts, setPayingDebts] = useState(new Set<string>());
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [modalData, setModalData] = useState<{ amount: number; receiverName: string; receiverId: string; groupId: string; expenseId: string | null } | null>(null);
+    const [modalData, setModalData] = useState<{ amount: number; receiverName: string; receiverId: string; groupId: string; expenseId: string | null; description?: string; groupName?: string } | null>(null);
     const [toastMessage, setToastMessage] = useState<{ title: string; type: 'success' | 'error' } | null>(null);
     const historyRef = useRef<HTMLDivElement | null>(null);
     const realOffset = useRef<number>(0); // tracks true backend offset independently of filters
@@ -143,6 +150,8 @@ const Expenses: React.FC = () => {
             receiverId: debt.receiver_id,
             groupId: debt.group_id,
             expenseId: debt.expense_id,
+            description: debt.expense_description,
+            groupName: debt.group_name,
         });
         setIsModalOpen(true);
     };
@@ -245,7 +254,7 @@ const Expenses: React.FC = () => {
             )}
 
             {/* Sidebar */}
-            <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0">
+            <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0 sticky top-0 h-screen">
                 <div className="p-8 flex items-center gap-3">
                     <div className="w-8 h-8 bg-accent/20 rounded-lg flex items-center justify-center">
                         <Users className="text-accent" size={20} />
@@ -257,7 +266,6 @@ const Expenses: React.FC = () => {
                     <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
                     <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
                     <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
-                    <NavItem icon={<Settings size={19} />} label="Settings" to="/settings" />
                 </nav>
                 <div className="p-6 border-t border-white/5 mt-auto">
                     <button
@@ -277,12 +285,6 @@ const Expenses: React.FC = () => {
                         <p className="text-sm text-secondary/70 font-semibold mt-0.5">Manage your transactions</p>
                     </div>
                     <div className="flex items-center gap-4">
-                        <button className="relative p-2 text-secondary hover:text-primary transition-colors">
-                            <Bell size={22} />
-                            {pendingSettlementsReceived.length > 0 && (
-                                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full" />
-                            )}
-                        </button>
                         <div className="flex items-center gap-3 bg-white p-1 pr-4 rounded-full shadow-sm border border-secondary/10">
                             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-accent text-xs font-bold">
                                 {user?.name?.charAt(0).toUpperCase()}
@@ -327,7 +329,7 @@ const Expenses: React.FC = () => {
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
                         selectedGroup={selectedGroup}
-                        setSelectedGroup={setSelectedGroup}
+                        setSelectedGroup={handleSetSelectedGroup}
                         uniqueGroups={uniqueGroups}
                         isFilterOpen={isFilterOpen}
                         setIsFilterOpen={setIsFilterOpen}
@@ -348,6 +350,8 @@ const Expenses: React.FC = () => {
                 onConfirm={confirmPayment}
                 receiverName={modalData?.receiverName}
                 amount={modalData?.amount}
+                description={modalData?.description}
+                groupName={modalData?.groupName}
             />
         </div>
     );

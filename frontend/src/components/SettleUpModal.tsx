@@ -1,17 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, Loader2 } from 'lucide-react';
-
-/*
- * SettleUpModal — Confirmation dialog for sending a payment.
- *
- * Flow: User clicks "Pay" on a debt → modal opens → user confirms →
- *   POST /settlements/ → success → parent closes modal and refreshes.
- *
- * Error handling:
- *   ALREADY_PENDING → "A payment request is already pending."
- *   SELF_SETTLEMENT_NOT_ALLOWED → "You cannot settle a debt with yourself."
- *   Other → generic error.
- */
+import { Loader2, AlertCircle } from 'lucide-react';
 
 interface Props {
     isOpen: boolean;
@@ -19,9 +7,11 @@ interface Props {
     onConfirm: () => Promise<void>;
     receiverName?: string;
     amount?: number;
+    description?: string;
+    groupName?: string;
 }
 
-const SettleUpModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, receiverName, amount }) => {
+const SettleUpModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, receiverName, amount, description, groupName }) => {
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +25,6 @@ const SettleUpModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, receiverNa
         setError(null);
         try {
             await onConfirm();
-            // Parent closes modal on success
         } catch (err: any) {
             const detail = err?.response?.data?.detail;
             if (detail === 'SETTLEMENT_ALREADY_PENDING') {
@@ -55,46 +44,45 @@ const SettleUpModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, receiverNa
 
     return (
         <div
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
             onClick={handleClose}
         >
             <div
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="bg-primary px-6 py-5 flex items-center justify-between">
+                <div className="bg-primary px-6 py-5 flex items-center gap-3">
+                    <AlertCircle size={20} className="text-white shrink-0" />
                     <div>
-                        <h3 className="text-white font-black text-lg tracking-tight">Confirm Payment</h3>
-                        <p className="text-white/60 text-xs font-semibold mt-0.5">
-                            This will send a request for confirmation
+                        <h3 className="text-white font-black text-base tracking-tight">Send Payment</h3>
+                        <p className="text-white/70 text-xs font-semibold mt-0.5">
+                            Please review before proceeding
                         </p>
                     </div>
-                    <button
-                        onClick={handleClose}
-                        disabled={processing}
-                        className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-xl transition-colors disabled:opacity-30"
-                    >
-                        <X size={18} />
-                    </button>
                 </div>
 
                 {/* Body */}
-                <div className="px-6 py-6 space-y-5">
-                    <div className="flex flex-col items-center gap-2 py-4">
+                <div className="px-6 py-6 flex flex-col gap-4">
+                    <div className="flex flex-col items-center gap-1 py-2">
                         <p className="text-sm font-semibold text-secondary/60">You are paying</p>
-                        <p className="text-4xl font-black text-primary tracking-tight">{fmt(amount)}</p>
-                        <p className="text-sm font-bold text-secondary/70">
-                            to <span className="text-primary">{receiverName ?? '—'}</span>
+                        <p className="text-xl font-black text-primary">{receiverName ?? '—'}</p>
+                        <p className="text-3xl font-black text-primary tracking-tight mt-1">
+                            {fmt(amount)}
                         </p>
+                        {(description || groupName) && (
+                            <p className="text-xs font-semibold text-secondary/50 mt-1">
+                                {description}{description && groupName ? ` in ${groupName}` : groupName}
+                            </p>
+                        )}
                     </div>
 
-                    <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-700 font-semibold">
-                        ⚠️ The receiver must <strong>confirm</strong> this payment before the debt is settled.
-                    </div>
+                    <p className="text-[11px] text-secondary/50 font-semibold text-center">
+                        The receiver must confirm this payment before the debt is marked as settled.
+                    </p>
 
                     {error && (
-                        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-600 font-semibold">
+                        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-600 font-semibold text-center">
                             {error}
                         </div>
                     )}
@@ -116,7 +104,7 @@ const SettleUpModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, receiverNa
                     >
                         {processing
                             ? <><Loader2 size={16} className="animate-spin" /> Sending...</>
-                            : <><Send size={15} /> Send Payment</>}
+                            : 'Yes, Send'}
                     </button>
                 </div>
             </div>
