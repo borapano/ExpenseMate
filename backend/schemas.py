@@ -106,6 +106,10 @@ class GroupBase(BaseModel):
 class GroupCreate(GroupBase):
     pass
 
+class GroupUpdate(BaseModel):
+    name: str = Field(..., min_length=3, max_length=100)
+    description: Optional[str] = Field(None, max_length=255)
+
 class GroupJoin(BaseModel):
     invite_code: str = Field(..., min_length=6, max_length=6)
 

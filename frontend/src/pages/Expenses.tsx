@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import api from '../api';
@@ -65,9 +65,6 @@ const Expenses: React.FC = () => {
     const { user, logout } = useAuth();
     const {
         expenses,
-        setExpenses,
-        totalExpenses,
-        setTotalExpenses,
         groups,
         settlementDashboard,
         loading,
@@ -79,21 +76,15 @@ const Expenses: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedGroup, setSelectedGroup] = useState<{ id: string | null; name: string }>({ id: null, name: 'All Groups' });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [visibleCount, setVisibleCount] = useState(5);
 
-    // When group filter changes → reset pagination
     const handleSetSelectedGroup = (grp: { id: string | null; name: string }) => {
         setSelectedGroup(grp);
-        setVisibleCount(5);
-        realOffset.current = 0;
     };
     const [payingDebts, setPayingDebts] = useState(new Set<string>());
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [modalData, setModalData] = useState<{ amount: number; receiverName: string; receiverId: string; groupId: string; expenseId: string | null; description?: string; groupName?: string } | null>(null);
     const [toastMessage, setToastMessage] = useState<{ title: string; type: 'success' | 'error' } | null>(null);
-    const historyRef = useRef<HTMLDivElement | null>(null);
-    const realOffset = useRef<number>(0); // tracks true backend offset independently of filters
 
     // ── Dashboard-derived data ────────────────────────────────────────────
     const pendingSettlementsReceived = settlementDashboard?.global_requests ?? [];
@@ -123,8 +114,6 @@ const Expenses: React.FC = () => {
         try {
             await api.patch(`/settlements/${id}/confirm`);
             showToast('Settlement Confirmed!');
-            setVisibleCount(5);
-            realOffset.current = 0;
             await refreshAllData();
         } catch {
             showToast('Error confirming settlement', 'error');
@@ -136,8 +125,6 @@ const Expenses: React.FC = () => {
         try {
             await api.patch(`/settlements/${id}/reject`);
             showToast('Settlement Rejected');
-            setVisibleCount(5);
-            realOffset.current = 0;
             await refreshAllData();
         } catch {
             showToast('Error rejecting settlement', 'error');
@@ -176,8 +163,6 @@ const Expenses: React.FC = () => {
             showToast('Payment submitted! Awaiting confirmation.');
             setIsModalOpen(false);
             setModalData(null);
-            setVisibleCount(5);
-            realOffset.current = 0;
             await refreshAllData();
         } catch (err) {
             setPayingDebts(prev => { const s = new Set(prev); s.delete(debtId); return s; });
@@ -185,32 +170,6 @@ const Expenses: React.FC = () => {
         } finally {
             setIsSubmitting(false);
         }
-    };
-
-    // ── Pagination ────────────────────────────────────────────────────────
-    const handleSeeMore = async () => {
-        try {
-            const offset = realOffset.current;
-            const gid = selectedGroup.id ? `&group_id=${selectedGroup.id}` : '';
-            const res = await api.get(`/users/me/expenses?limit=5&offset=${offset}${gid}`);
-            const newItems = res.data?.expenses ?? [];
-            setExpenses(prev => {
-                // Avoid duplicates by filtering out items we already have
-                const existingIds = new Set(prev.map((e: any) => e.id));
-                const fresh = newItems.filter((e: any) => !existingIds.has(e.id));
-                return [...prev, ...fresh];
-            });
-            setTotalExpenses(res.data?.total ?? 0);
-            realOffset.current = offset + newItems.length;
-            setVisibleCount(c => c + 5);
-        } catch {
-            showToast('Error loading more expenses', 'error');
-        }
-    };
-
-    const handleSeeLess = () => {
-        // Only collapse visible count — never destroy fetched data
-        setVisibleCount(5);
     };
 
     // ── Filtering ─────────────────────────────────────────────────────────
@@ -228,10 +187,6 @@ const Expenses: React.FC = () => {
         }),
         [expenses, searchQuery, selectedGroup.id]
     );
-
-    const hasMore = selectedGroup.id
-        ? visibleCount < filteredExpenses.length  // local filter active → compare against filtered count
-        : expenses.length < totalExpenses;         // no filter → compare against backend total
 
     // ── Loading guard (show page once dashboard data arrives) ──────────────
     if (loading && !settlementDashboard) {
@@ -266,7 +221,7 @@ const Expenses: React.FC = () => {
                 <div className="flex-1 flex flex-col min-h-0 px-4 mt-4">
                     <div className="shrink-0 space-y-1">
                         <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" to="/dashboard" />
-                        <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
+                        <NavItem icon={<Activity size={19} />} label="Insights" to="/insights" />
                         <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
                         <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
                     </div>
@@ -353,11 +308,6 @@ const Expenses: React.FC = () => {
                         uniqueGroups={uniqueGroups}
                         isFilterOpen={isFilterOpen}
                         setIsFilterOpen={setIsFilterOpen}
-                        hasMore={hasMore}
-                        visibleCount={visibleCount}
-                        onSeeMore={handleSeeMore}
-                        onSeeLess={handleSeeLess}
-                        historyRef={historyRef}
                         user={user}
                     />
                 </div>

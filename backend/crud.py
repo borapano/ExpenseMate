@@ -373,6 +373,7 @@ def create_expense(db: Session, expense: schemas.ExpenseCreate, payer_id: UUID):
                 expense_id=db_expense.id,
                 user_id=p.user_id,
                 share_amount=p.share_amount,
+                original_share_amount=p.share_amount,  # immutable original for display
                 is_settled=False
             ))
         db.commit()
@@ -402,6 +403,7 @@ def update_expense(db: Session, expense_id: UUID, expense_data: schemas.ExpenseC
                 expense_id=expense_id,
                 user_id=p.user_id,
                 share_amount=p.share_amount,
+                original_share_amount=p.share_amount,  # immutable original for display
                 is_settled=False
             ))
         db.commit()
@@ -495,6 +497,11 @@ def get_group_settlements(db: Session, group_id: UUID):
     )
 
 def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
+    """
+    Approach B — per-expense settlements only.
+    Confirmation simply marks the specific ExpenseParticipant as settled.
+    share_amount is NEVER mutated — it always holds the original equal split.
+    """
     settlement = db.query(models.Settlement).filter(
         models.Settlement.id == settlement_id,
         models.Settlement.receiver_id == receiver_id,
@@ -505,69 +512,33 @@ def confirm_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):
         return False
 
     try:
-        # 1. Kalojmë statusin në CONFIRMED
         settlement.status = "CONFIRMED"
 
         if settlement.expense_id:
-            # 2a. Mbyllim borxhin specifikisht për këtë shpenzim
-            borxh = db.query(models.ExpenseParticipant)\
-                .filter(
-                    models.ExpenseParticipant.expense_id == settlement.expense_id,
-                    models.ExpenseParticipant.user_id == settlement.sender_id
-                ).first()
-            if borxh:
-                borxh.is_settled = True
+            # Mark the sender's share on this specific expense as settled
+            ep = db.query(models.ExpenseParticipant).filter(
+                models.ExpenseParticipant.expense_id == settlement.expense_id,
+                models.ExpenseParticipant.user_id == settlement.sender_id
+            ).first()
+            if ep:
+                ep.is_settled = True
             else:
-                # Fallback: sender nuk është participant specifik — shlye FIFO
-                logger.warning(f"confirm_settlement: borxh not found for expense_id={settlement.expense_id}, sender_id={settlement.sender_id}. Falling back to FIFO.")
-                borxhet = db.query(models.ExpenseParticipant)\
-                    .join(models.Expense)\
-                    .filter(
-                        models.Expense.group_id == settlement.group_id,
-                        models.Expense.payer_id == receiver_id,
-                        models.ExpenseParticipant.user_id == settlement.sender_id,
-                        models.ExpenseParticipant.is_settled == False
-                    ).order_by(models.Expense.created_date.asc()).all()
-                rem_amount = float(settlement.amount)
-                for b in borxhet:
-                    if rem_amount <= 0: break
-                    share = float(b.share_amount)
-                    if share <= rem_amount:
-                        rem_amount -= share
-                        b.is_settled = True
-                    else:
-                        b.share_amount = share - rem_amount
-                        rem_amount = 0
+                logger.warning(
+                    f"confirm_settlement: no ExpenseParticipant found for "
+                    f"expense_id={settlement.expense_id}, sender_id={settlement.sender_id}"
+                )
         else:
-            # 2b. Mbyllim borxhet në mënyrë ciklike (FIFO) pёr settlements e vjetra
-            borxhet = db.query(models.ExpenseParticipant)\
-                .join(models.Expense)\
-                .filter(
-                    models.Expense.group_id == settlement.group_id,
-                    models.Expense.payer_id == receiver_id,
-                    models.ExpenseParticipant.user_id == settlement.sender_id,
-                    models.ExpenseParticipant.is_settled == False
-                ).order_by(models.Expense.created_date.asc()).all()
-
-            rem_amount = float(settlement.amount)
-            for b in borxhet:
-                if rem_amount <= 0: break
-                
-                share = float(b.share_amount)
-                if share <= rem_amount:
-                    rem_amount -= share
-                    b.is_settled = True
-                else:
-                    b.share_amount = share - rem_amount
-                    rem_amount = 0
-                    # share_amount u zvogëlua por borxhi nuk u shlye plotësisht
-                    # is_settled mbetet False — i saktë
+            # Should not happen in Approach B — log and skip
+            logger.error(
+                f"confirm_settlement: settlement {settlement_id} has no expense_id. "
+                "All settlements must be linked to a specific expense in Approach B."
+            )
 
         db.commit()
         return True
     except Exception as e:
         db.rollback()
-        logger.error(f"Gabim gjatë konfirmimit: {e}")
+        logger.error(f"Error confirming settlement: {e}")
         return False
 
 def reject_settlement(db: Session, settlement_id: UUID, receiver_id: UUID):

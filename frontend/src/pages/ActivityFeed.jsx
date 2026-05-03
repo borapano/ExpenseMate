@@ -221,7 +221,7 @@ const ActivityFeed = () => {
           <div className="flex-1 flex flex-col min-h-0 px-4 mt-4">
               <div className="shrink-0 space-y-1">
                   <NavItem icon={<LayoutDashboard size={19} />} label="Dashboard" to="/dashboard" />
-                  <NavItem icon={<Activity size={19} />} label="Activity Feed" to="/activity-feed" />
+                  <NavItem icon={<Activity size={19} />} label="Insights" to="/insights" />
                   <NavItem icon={<CreditCard size={19} />} label="Expenses" to="/expenses" />
                   <NavItem icon={<Users size={19} />} label="Groups" to="/groups" />
               </div>

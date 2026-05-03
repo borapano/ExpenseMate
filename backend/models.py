@@ -87,7 +87,8 @@ class ExpenseParticipant(Base):
     expense_id = Column(UUID(as_uuid=True), ForeignKey("expenses.id"), primary_key=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
     
-    share_amount = Column(Numeric(10, 2), nullable=False)
+    share_amount = Column(Numeric(10, 2), nullable=False)          # remaining debt (may shrink via FIFO)
+    original_share_amount = Column(Numeric(10, 2), nullable=True)  # immutable original split for display
     is_settled = Column(Boolean, default=False)
 
     # RELATIONSHIPS

@@ -224,13 +224,12 @@ def get_my_expenses(
     expense_ids = list({exp.id for _, exp in shares})
     group_ids = list({exp.group_id for _, exp in shares})
 
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    # All pending settlements linked to these expenses (no time filter — Approach B)
     specific_pending_map = {}
     if expense_ids:
         for s in db.query(models.Settlement).filter(
             models.Settlement.expense_id.in_(expense_ids),
             models.Settlement.status == "PENDING",
-            models.Settlement.created_at >= seven_days_ago
         ).all():
             specific_pending_map[(str(s.expense_id), str(s.sender_id))] = s
 
@@ -263,6 +262,11 @@ def get_my_expenses(
 
         is_payer = str(exp.payer_id) == current_user_str
 
+        # Approach B: per_person_share = equal split of total
+        _all_eps = all_participants_map.get(eid, [])
+        _ep_count = len(_all_eps)
+        per_person_share_expenses = round(float(exp.amount) / _ep_count, 2) if _ep_count > 0 else 0.0
+
         if is_payer:
             to_be_paid = 0.0
             waiting = 0.0
@@ -270,16 +274,15 @@ def get_my_expenses(
 
             for ep in participants:
                 ep_user_str = str(ep.user_id)
-                amount = float(ep.share_amount)
                 specific = specific_pending_map.get((eid, ep_user_str))
 
                 if ep.is_settled:
                     pass
                 elif specific:
-                    waiting += amount
+                    waiting += per_person_share_expenses
                     all_issued = False
                 else:
-                    to_be_paid += amount
+                    to_be_paid += per_person_share_expenses
                     all_issued = False
 
             if all_issued:
@@ -305,7 +308,6 @@ def get_my_expenses(
 
         else:
             ep = participants[0]
-            amount = float(ep.share_amount)
             specific = specific_pending_map.get((eid, current_user_str))
             to_be_paid_out = 0.0
             waiting_out = 0.0
@@ -315,34 +317,34 @@ def get_my_expenses(
                 user_balance = 0.0
             elif specific:
                 agg_status = "PENDING"
-                user_balance = -amount
+                user_balance = -per_person_share_expenses
             else:
                 agg_status = "NONE"
-                user_balance = -amount
+                user_balance = -per_person_share_expenses
 
-        all_eps_for_expense = all_participants_map.get(eid, [])
+        all_eps_for_expense = _all_eps  # already fetched above
 
         payer_id_str = str(exp.payer_id) if exp.payer_id else ""
         payer_has_share = any(str(ep.user_id) == payer_id_str for ep in all_eps_for_expense)
 
+        # Approach B: my_share = equal split of total
         my_share_ep = next((ep for ep in all_eps_for_expense if str(ep.user_id) == current_user_str), None)
-        my_share = float(my_share_ep.share_amount) if my_share_ep else 0.0
+        my_share = per_person_share_expenses if my_share_ep else 0.0
+        per_person_share = per_person_share_expenses
 
         def get_participant_status(ep_item):
             ep_uid = str(ep_item.user_id)
             if is_payer:
                 if ep_item.is_settled:
                     return "CONFIRMED"
-                s = specific_pending_map.get((eid, ep_uid))
-                if s:
+                if specific_pending_map.get((eid, ep_uid)):
                     return "PENDING"
                 return "NONE"
             else:
                 if ep_uid == current_user_str:
                     if ep_item.is_settled:
                         return "CONFIRMED"
-                    s = specific_pending_map.get((eid, ep_uid))
-                    if s:
+                    if specific_pending_map.get((eid, ep_uid)):
                         return "PENDING"
                     return "NONE"
                 else:
@@ -352,7 +354,8 @@ def get_my_expenses(
             {
                 "user_id": str(ep.user_id),
                 "user_name": ep.user.name if ep.user else "Unknown",
-                "amount": float(ep.share_amount),
+                "share_amount": per_person_share,
+                "amount": per_person_share,
                 "is_settled": ep.is_settled,
                 "is_payer": str(ep.user_id) == payer_id_str,
                 "is_me": str(ep.user_id) == current_user_str,
@@ -365,6 +368,7 @@ def get_my_expenses(
             participants_list.insert(0, {
                 "user_id": payer_id_str,
                 "user_name": exp.payer.name,
+                "share_amount": 0.0,
                 "amount": 0.0,
                 "is_settled": True,
                 "is_payer": True,
@@ -381,7 +385,7 @@ def get_my_expenses(
             "group_name": exp.group.name if exp.group else "Personal",
             "description": exp.description,
             "category": exp.category,
-            "amount": float(sum(float(ep.share_amount) for ep in participants)),
+            "amount": float(exp.amount),
             "total_amount": float(exp.amount),
             "user_balance": user_balance,
             "expense_date": exp.expense_date.isoformat() if exp.expense_date else "",
@@ -485,81 +489,242 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
     total = sum(float(e.amount) for e in group.expenses)
     sorted_expenses = sorted(group.expenses, key=lambda e: e.created_date, reverse=True)
 
-    now_utc = datetime.now(timezone.utc)
-    seven_days_ago = now_utc - timedelta(days=7)
-    other_member_ids = [m.user_id for m in group.members if m.user_id != current_user.id]
+    uid_str = str(current_user.id)
 
-    i_owe_rows = (
-        db.query(
-            models.Expense.payer_id.label("other_user_id"),
-            func.sum(models.ExpenseParticipant.share_amount).label("total")
-        )
-        .join(models.ExpenseParticipant, models.ExpenseParticipant.expense_id == models.Expense.id)
-        .filter(
-            models.Expense.group_id == group_id,
-            models.Expense.payer_id.in_(other_member_ids),
-            models.ExpenseParticipant.user_id == current_user.id,
-            models.ExpenseParticipant.is_settled == False
-        )
-        .group_by(models.Expense.payer_id)
-        .all()
-    )
-    i_owe_map = {str(row.other_user_id): float(row.total) for row in i_owe_rows}
-
-    owed_to_me_rows = (
-        db.query(
-            models.ExpenseParticipant.user_id.label("other_user_id"),
-            func.sum(models.ExpenseParticipant.share_amount).label("total")
-        )
-        .join(models.Expense, models.Expense.id == models.ExpenseParticipant.expense_id)
-        .filter(
-            models.Expense.group_id == group_id,
-            models.Expense.payer_id == current_user.id,
-            models.ExpenseParticipant.user_id.in_(other_member_ids),
-            models.ExpenseParticipant.is_settled == False
-        )
-        .group_by(models.ExpenseParticipant.user_id)
-        .all()
-    )
-    owed_to_me_map = {str(row.other_user_id): float(row.total) for row in owed_to_me_rows}
-
-    pending_sent_rows = (
-        db.query(models.Settlement.receiver_id)
+    # ── Approach B: per-expense settlements, no netting ───────────────────────
+    #
+    # Pending settlements I sent in this group (keyed by expense_id → Settlement)
+    my_pending_sent = (
+        db.query(models.Settlement)
         .filter(
             models.Settlement.group_id == group_id,
             models.Settlement.sender_id == current_user.id,
-            models.Settlement.receiver_id.in_(other_member_ids),
             models.Settlement.status == "PENDING",
-            models.Settlement.created_at >= seven_days_ago,
         )
         .all()
     )
-    pending_sent_ids = {str(row.receiver_id) for row in pending_sent_rows}
+    my_pending_by_expense: dict[str, models.Settlement] = {
+        str(s.expense_id): s for s in my_pending_sent if s.expense_id
+    }
 
-    member_map = {m.user_id: m.user for m in group.members}
-    my_debts = []
-    for uid in other_member_ids:
-        uid_str = str(uid)
-        net_bal = i_owe_map.get(uid_str, 0.0) - owed_to_me_map.get(uid_str, 0.0)
-        if net_bal > 0:
-            my_debts.append({
-                "user_id": uid_str,
-                "user_name": member_map[uid].name,
-                "amount": round(net_bal, 2),
-                "is_pending": uid_str in pending_sent_ids,
-            })
-
-    pending_requests = (
+    # Incoming PENDING settlements others sent me (action required for me)
+    incoming_pending = (
         db.query(models.Settlement)
-        .options(joinedload(models.Settlement.sender))
+        .options(
+            joinedload(models.Settlement.sender),
+            joinedload(models.Settlement.expense),
+        )
         .filter(
             models.Settlement.group_id == group_id,
             models.Settlement.receiver_id == current_user.id,
             models.Settlement.status == "PENDING",
-            models.Settlement.created_at >= seven_days_ago,
         )
         .all()
     )
+    # (expense_id, sender_id) → True  — used by build_group_expense p_status
+    incoming_by_key: dict[tuple, bool] = {
+        (str(s.expense_id), str(s.sender_id)): True
+        for s in incoming_pending
+        if s.expense_id
+    }
+
+    # ── Build per-expense debt / receivable lists from already-loaded expenses ─
+    my_debts: list[dict] = []
+    expected_payments: list[dict] = []
+
+    # Per-person running totals for net_balance and members card
+    i_owe_per_person: dict[str, float] = {}       # payer_uid → total I owe them
+    owed_to_me_per_person: dict[str, float] = {}  # debtor_uid → total they owe me
+
+    for e in group.expenses:
+        eid = str(e.id)
+        payer_id_str = str(e.payer_id) if e.payer_id else ""
+        all_parts = e.participants or []
+        count = len(all_parts)
+        per_share = round(float(e.amount) / count, 2) if count > 0 else 0.0
+
+        if payer_id_str != uid_str:
+            # Someone else paid — check if I'm a participant with an unpaid share
+            my_part = next((p for p in all_parts if str(p.user_id) == uid_str), None)
+            if my_part and not my_part.is_settled:
+                pending = my_pending_by_expense.get(eid)
+                my_debts.append({
+                    "expense_id": eid,
+                    "expense_description": e.description or "",
+                    "payer_id": payer_id_str,
+                    "payer_name": e.payer.name if e.payer else "Unknown",
+                    "amount": per_share,
+                    "is_pending": pending is not None,
+                    "settlement_id": str(pending.id) if pending else None,
+                })
+                i_owe_per_person[payer_id_str] = (
+                    i_owe_per_person.get(payer_id_str, 0.0) + per_share
+                )
+        else:
+            # I paid — each unsettled participant owes me one share
+            for p in all_parts:
+                p_uid = str(p.user_id)
+                if p_uid == uid_str or p.is_settled:
+                    continue
+                owed_to_me_per_person[p_uid] = (
+                    owed_to_me_per_person.get(p_uid, 0.0) + per_share
+                )
+                # Only add to "To Collect" if they haven't already sent a pending settlement
+                if not incoming_by_key.get((eid, p_uid)):
+                    expected_payments.append({
+                        "expense_id": eid,
+                        "expense_description": e.description or "",
+                        "user_id": p_uid,
+                        "user_name": p.user.name if getattr(p, "user", None) else "Unknown",
+                        "amount": per_share,
+                    })
+
+    net_balance = round(
+        sum(owed_to_me_per_person.values()) - sum(i_owe_per_person.values()), 2
+    )
+
+    # Members list with per-person net balance for the Members card
+    members_list = []
+    for m in group.members:
+        m_uid = str(m.user.id)
+        balance = round(
+            owed_to_me_per_person.get(m_uid, 0.0) - i_owe_per_person.get(m_uid, 0.0),
+            2,
+        )
+        members_list.append({
+            "user_id": m_uid,
+            "user_name": m.user.name,
+            "user_email": m.user.email,
+            "balance": balance,
+        })
+
+    # Action-required list: incoming PENDING settlements I need to confirm/reject
+    pending_settlements_list = [
+        {
+            "id": str(s.id),
+            "sender_id": str(s.sender_id),
+            "sender_name": s.sender.name if s.sender else "Unknown",
+            "expense_id": str(s.expense_id) if s.expense_id else None,
+            "expense_description": s.expense.description if s.expense else "",
+            "amount": float(s.amount),
+        }
+        for s in incoming_pending
+    ]
+
+    # Build rich expense data for the table (Approach B — per-expense only)
+    def build_group_expense(e):
+        eid = str(e.id)
+        payer_id_str = str(e.payer_id) if e.payer_id else ""
+        is_payer = payer_id_str == uid_str
+        all_parts = e.participants or []
+
+        # Equal-split share (Approach B: always expense.amount / participant_count)
+        participant_count = len(all_parts)
+        per_person_share = round(float(e.amount) / participant_count, 2) if participant_count > 0 else 0.0
+
+        # Participant status — expense-level settlements only
+        def p_status(p):
+            p_uid = str(p.user_id)
+            if is_payer:
+                if p.is_settled:
+                    return "CONFIRMED"
+                if incoming_by_key.get((eid, p_uid)):
+                    return "PENDING"
+                return "NONE"
+            else:
+                if p_uid == uid_str:
+                    if p.is_settled:
+                        return "CONFIRMED"
+                    if eid in my_pending_by_expense:
+                        return "PENDING"
+                    return "NONE"
+                return None
+
+        payer_has_share = any(str(p.user_id) == payer_id_str for p in all_parts)
+        participants_list = [
+            {
+                "user_id": str(p.user_id),
+                "user_name": p.user.name if getattr(p, "user", None) else "Unknown",
+                "share_amount": per_person_share,
+                "amount":       per_person_share,
+                "is_settled": bool(p.is_settled),
+                "is_payer": str(p.user_id) == payer_id_str,
+                "is_me": str(p.user_id) == uid_str,
+                "status": p_status(p),
+            }
+            for p in all_parts
+        ]
+        if not payer_has_share and e.payer:
+            participants_list.insert(0, {
+                "user_id": payer_id_str,
+                "user_name": e.payer.name,
+                "share_amount": 0.0,
+                "amount": 0.0,
+                "is_settled": True,
+                "is_payer": True,
+                "is_me": payer_id_str == uid_str,
+                "status": "PAYER",
+            })
+
+        # Compute transaction_status and user_balance using per_person_share
+        if is_payer:
+            to_receive = 0.0
+            waiting = 0.0
+            for p in participants_list:
+                if p["user_id"] == uid_str or (p["is_payer"] and p["share_amount"] == 0.0):
+                    continue
+                if p["is_settled"]:
+                    continue
+                if p["status"] == "PENDING":
+                    waiting += per_person_share
+                else:
+                    to_receive += per_person_share
+            if to_receive > 0 and waiting > 0:
+                tx_status, user_balance = "MIXED", to_receive + waiting
+                to_be_paid_out, waiting_out = to_receive, waiting
+            elif waiting > 0:
+                tx_status, user_balance = "WAITING_CONFIRMATION", waiting
+                to_be_paid_out, waiting_out = 0.0, waiting
+            elif to_receive > 0:
+                tx_status, user_balance = "NONE", to_receive
+                to_be_paid_out, waiting_out = to_receive, 0.0
+            else:
+                tx_status, user_balance = "CONFIRMED", 0.0
+                to_be_paid_out, waiting_out = 0.0, 0.0
+        else:
+            my_p = next((p for p in participants_list if p["user_id"] == uid_str and not p.get("is_payer")), None)
+            to_be_paid_out = waiting_out = 0.0
+            if my_p:
+                if my_p["is_settled"]:
+                    tx_status, user_balance = "CONFIRMED", 0.0
+                elif eid in my_pending_by_expense:
+                    tx_status, user_balance = "PENDING", -per_person_share
+                else:
+                    tx_status, user_balance = "NONE", -per_person_share
+            else:
+                tx_status, user_balance = "NONE", 0.0
+
+        my_share_p = next((p for p in all_parts if str(p.user_id) == uid_str), None)
+        my_share = per_person_share if my_share_p else 0.0
+
+        return {
+            "id": eid,
+            "group_id": str(e.group_id),
+            "payer_id": payer_id_str,
+            "payer_name": e.payer.name if e.payer else "Unknown",
+            "amount": float(e.amount),
+            "description": e.description or "",
+            "category": e.category or "",
+            "expense_date": e.expense_date.isoformat() if e.expense_date else "",
+            "created_date": e.created_date.isoformat() if e.created_date else "",
+            "user_balance": user_balance,
+            "transaction_status": tx_status,
+            "to_be_paid": to_be_paid_out,
+            "waiting_amount": waiting_out,
+            "my_share": my_share,
+            "participants": participants_list,
+            "is_payer": is_payer,
+        }
 
     return {
         "id": str(group.id),
@@ -567,16 +732,59 @@ def read_group(group_id: UUID, db: Session = Depends(get_db), current_user: mode
         "description": group.description or "",
         "code": group.code,
         "creator_id": str(group.creator_id),
-        "created_date": group.created_date,
-        "members": [{"user_id": str(m.user.id), "user_name": m.user.name, "user_email": m.user.email} for m in group.members],
-        "expenses": [format_expense(e) for e in sorted_expenses],
+        "created_date": group.created_date.isoformat() if group.created_date else None,
+        "members": members_list,
+        "expenses": [build_group_expense(e) for e in sorted_expenses],
         "total_expenses": float(total),
         "my_debts": my_debts,
-        "pending_settlements": [
-            {"id": str(s.id), "sender_name": s.sender.name, "amount": float(s.amount)}
-            for s in pending_requests
-        ]
+        "pending_settlements": pending_settlements_list,
+        "net_balance": net_balance,
+        "expected_payments": expected_payments,
     }
+
+
+@app.put("/groups/{group_id}")
+def update_group(group_id: UUID, data: schemas.GroupUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "GROUP_NOT_FOUND")
+    if str(group.creator_id) != str(current_user.id):
+        raise HTTPException(403, "NOT_ADMIN")
+    group.name = data.name
+    group.description = data.description
+    db.commit()
+    db.refresh(group)
+    return read_group(group_id, db, current_user)
+
+
+@app.delete("/groups/{group_id}")
+def delete_group(group_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "GROUP_NOT_FOUND")
+    if str(group.creator_id) != str(current_user.id):
+        raise HTTPException(403, "NOT_ADMIN")
+    expense_count = db.query(models.Expense).filter(models.Expense.group_id == group_id).count()
+    if expense_count > 0:
+        raise HTTPException(400, "GROUP_HAS_EXPENSES")
+    db.delete(group)
+    db.commit()
+    return {"detail": "DELETED"}
+
+
+@app.post("/groups/{group_id}/leave")
+def leave_group(group_id: UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    if not group:
+        raise HTTPException(404, "GROUP_NOT_FOUND")
+    if str(group.creator_id) == str(current_user.id):
+        raise HTTPException(400, "ADMIN_CANNOT_LEAVE")
+    membership = db.query(models.GroupMember).filter_by(user_id=current_user.id, group_id=group_id).first()
+    if not membership:
+        raise HTTPException(404, "NOT_A_MEMBER")
+    db.delete(membership)
+    db.commit()
+    return {"detail": "LEFT"}
 
 
 @app.post("/groups/join")
@@ -689,8 +897,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
             "total_to_receive": 0.0
         }
 
-    now_utc = datetime.now(timezone.utc)
-    seven_days_ago_global = now_utc - timedelta(days=7)
     pending_received = db.query(models.Settlement).options(
         joinedload(models.Settlement.sender),
         joinedload(models.Settlement.group),
@@ -698,7 +904,6 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
     ).filter(
         models.Settlement.receiver_id == current_user.id,
         models.Settlement.status == "PENDING",
-        models.Settlement.created_at >= seven_days_ago_global
     ).all()
 
     pending_received_list = [{
@@ -712,10 +917,16 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
         "created_at": s.created_at.isoformat() if s.created_at else None
     } for s in pending_received]
 
+    # Key set: (expense_id, sender_id) for all incoming pending settlements
+    # Used to exclude those entries from expected_payments (they're already in Action Required)
+    incoming_pending_key: set[tuple] = {
+        (str(s.expense_id), str(s.sender_id))
+        for s in pending_received if s.expense_id
+    }
+
     pending_sent = db.query(models.Settlement).filter(
         models.Settlement.sender_id == current_user.id,
         models.Settlement.status == "PENDING",
-        models.Settlement.created_at >= seven_days_ago_global
     ).all()
 
     pending_sent_map = {}
@@ -733,15 +944,14 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
         models.Expense.group_id.in_(group_ids)
     ).options(
         joinedload(models.Expense.payer),
-        joinedload(models.Expense.group)
+        joinedload(models.Expense.group),
+        joinedload(models.Expense.participants)
     ).all()
 
     payables_expense_ids = [e.id for _, e in payables_query]
-    seven_days_ago_dash = datetime.now(timezone.utc) - timedelta(days=7)
     specific_pending_list = db.query(models.Settlement).filter(
         models.Settlement.expense_id.in_(payables_expense_ids),
         models.Settlement.status == "PENDING",
-        models.Settlement.created_at >= seven_days_ago_dash
     ).all() if payables_expense_ids else []
     specific_pending_map = {s.expense_id: True for s in specific_pending_list}
 
@@ -749,7 +959,8 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
     total_to_pay = 0.0
 
     for ep, exp in payables_query:
-        amount = float(ep.share_amount)
+        p_count = len(exp.participants) if exp.participants else 1
+        amount = round(float(exp.amount) / p_count, 2)
         total_to_pay += amount
         is_pending = specific_pending_map.get(exp.id, False)
 
@@ -779,14 +990,20 @@ def get_global_settlements(db: Session = Depends(get_db), current_user: models.U
         models.Expense.group_id.in_(group_ids)
     ).options(
         joinedload(models.ExpenseParticipant.user),
-        joinedload(models.Expense.group)
+        joinedload(models.Expense.group),
+        joinedload(models.Expense.participants)
     ).all()
 
     receivables = []
     total_to_receive = 0.0
 
     for ep, exp in receivables_query:
-        amount = float(ep.share_amount)
+        # Skip if this person already sent a pending settlement for this expense
+        # (it belongs in Action Required, not To Collect)
+        if (str(exp.id), str(ep.user_id)) in incoming_pending_key:
+            continue
+        p_count = len(exp.participants) if exp.participants else 1
+        amount = round(float(exp.amount) / p_count, 2)
         total_to_receive += amount
         receivables.append({
             "expense_id": str(exp.id),

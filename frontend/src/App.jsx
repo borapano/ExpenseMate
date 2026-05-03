@@ -55,7 +55,7 @@ function App() {
           </ProtectedRoute>
         } />
 
-        <Route path="/activity-feed" element={
+        <Route path="/insights" element={
           <ProtectedRoute>
             <ActivityFeed />
           </ProtectedRoute>

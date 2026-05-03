@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-    Search, Filter, ChevronDown, ChevronUp, Check, Activity, X,
+    Search, Filter, ChevronDown, Check, Activity, X,
     Utensils, ShoppingBasket, Car, Home, Zap, Film,
     ShoppingCart, Plane, Heart, FileText, Tag, Users
 } from 'lucide-react';
@@ -14,11 +14,6 @@ interface Props {
     uniqueGroups: { id: string | null; name: string }[];
     isFilterOpen: boolean;
     setIsFilterOpen: (v: boolean) => void;
-    hasMore: boolean;
-    visibleCount: number;
-    onSeeMore: () => void;
-    onSeeLess: () => void;
-    historyRef: React.RefObject<HTMLDivElement | null>;
     user: any;
 }
 
@@ -219,18 +214,15 @@ const ExpenseHistoryCard: React.FC<Props> = ({
     selectedGroup, setSelectedGroup,
     uniqueGroups,
     isFilterOpen, setIsFilterOpen,
-    hasMore, visibleCount,
-    onSeeMore, onSeeLess,
-    historyRef, user,
+    user,
 }) => {
     const [modalExpense, setModalExpense] = useState<any | null>(null);
 
     const items = Array.isArray(filteredExpenses) ? filteredExpenses : [];
-    const visible = items.slice(0, visibleCount);
     const uid = String(user?.id ?? '').toLowerCase();
 
     return (
-        <div ref={historyRef} className="bg-white rounded-2xl shadow-sm border border-secondary/10 flex flex-col hover:shadow-md transition-shadow mt-2">
+        <div className="bg-white rounded-2xl shadow-sm border border-secondary/10 flex flex-col hover:shadow-md transition-shadow mt-2">
 
             {/* ── Header ── */}
             <div className="px-6 py-5 border-b border-secondary/10 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
@@ -285,7 +277,12 @@ const ExpenseHistoryCard: React.FC<Props> = ({
             </div>
 
             {/* ── Table ── */}
-            <div className="flex-1 overflow-x-auto min-h-[360px]">
+            <div className="overflow-x-auto overflow-y-auto h-[710px]
+                [&::-webkit-scrollbar]:w-1.5
+                [&::-webkit-scrollbar-track]:bg-transparent
+                [&::-webkit-scrollbar-thumb]:bg-secondary/20
+                [&::-webkit-scrollbar-thumb]:rounded-full
+                [&::-webkit-scrollbar-thumb:hover]:bg-secondary/30">
                 {items.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-secondary/30 gap-3 min-h-[300px]">
                         <Activity size={32} />
@@ -301,7 +298,7 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                             <col style={{ width: '16.66%' }} />
                             <col style={{ width: '16.70%' }} />
                         </colgroup>
-                        <thead>
+                        <thead className="sticky top-0 z-10 bg-white">
                             <tr className="border-b border-secondary/10 bg-secondary/[0.02]">
                                 {['Date', 'Expense & Group', 'Payer', 'Participants', 'My Share', 'Status'].map(h => (
                                     <th key={h} className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-secondary/40 text-left">
@@ -311,7 +308,7 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-secondary/5">
-                            {visible?.map(expense => {
+                            {items.map(expense => {
                                 if (!expense) return null;
 
                                 const isPayer = String(expense.payer_id ?? '').toLowerCase() === uid;
@@ -421,20 +418,6 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                     </table>
                 )}
 
-                {/* See More / Less */}
-                {items.length > 5 && (
-                    <div className="p-6 flex justify-center bg-gray-50/30 border-t border-secondary/5">
-                        {visibleCount < items.length || hasMore ? (
-                            <button onClick={onSeeMore} className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm">
-                                See More <ChevronDown size={14} strokeWidth={3} />
-                            </button>
-                        ) : (
-                            <button onClick={onSeeLess} className="px-8 py-2.5 bg-white border border-secondary/15 text-xs font-black uppercase tracking-widest text-primary/70 rounded-xl flex items-center gap-2 hover:bg-gray-50 transition-colors active:scale-95 shadow-sm">
-                                See Less <ChevronUp size={14} strokeWidth={3} />
-                            </button>
-                        )}
-                    </div>
-                )}
             </div>
 
             {/* ── Participants Modal ── */}
