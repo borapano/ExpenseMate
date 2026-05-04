@@ -31,7 +31,7 @@ const MonthlyGraphCard = ({ data }) => {
                         </span>
                         <div className="px-4 py-2 rounded-full bg-accent/10 border border-accent/20 shadow-sm">
                             <span className="text-sm font-black text-accent">
-                                ${monthlyTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                €{monthlyTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </span>
                         </div>
                     </div>
@@ -51,8 +51,7 @@ const MonthlyGraphCard = ({ data }) => {
                             ></div>
 
                             {/* Kutiza e vlerës (Tooltip) poshtë */}
-                            <div className="absolute -bottom-8 opacity-0 group-hover/bar:opacity-100 transition-all duration-300 bg-primary text-accent text-[9px] font-black px-2 py-1 rounded-md shadow-lg translate-y-[-4px] group-hover/bar:translate-y-0 z-20 whitespace-nowrap">
-                                ${val}
+                            <div className="absolute -bottom-8 opacity-0 group-hover/bar:opacity-100 transition-all duration-300 bg-primary text-accent text-[9px] font-black px-2 py-1 rounded-md shadow-lg translate-y-[-4px] group-hover/bar:translate-y-0 z-20 whitespace-nowrap">€{val}
                             </div>
                         </div>
                     );

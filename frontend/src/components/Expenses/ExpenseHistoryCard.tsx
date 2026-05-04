@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
-    Search, Filter, ChevronDown, Check, Activity, X,
-    Utensils, ShoppingBasket, Car, Home, Zap, Film,
-    ShoppingCart, Plane, Heart, FileText, Tag, Users
+    Search, Filter, ChevronDown, Check, Activity, X, Users, ChevronRight
 } from 'lucide-react';
+// @ts-ignore
+import { getTableCatStyle } from '../../utils/categoryMap';
 
 interface Props {
     filteredExpenses: any[];
@@ -17,27 +17,9 @@ interface Props {
     user: any;
 }
 
-// ── Category style map ─────────────────────────────────────────────────────
-const CAT: Record<string, { icon: React.ReactNode; bg: string; text: string }> = {
-    'Food & Dining': { icon: <Utensils size={14} />, bg: 'bg-amber-100', text: 'text-amber-700' },
-    'Groceries': { icon: <ShoppingBasket size={14} />, bg: 'bg-emerald-100', text: 'text-emerald-700' },
-    'Transportation': { icon: <Car size={14} />, bg: 'bg-sky-100', text: 'text-sky-700' },
-    'Transport': { icon: <Car size={14} />, bg: 'bg-sky-100', text: 'text-sky-700' },
-    'Housing': { icon: <Home size={14} />, bg: 'bg-indigo-100', text: 'text-indigo-700' },
-    'Utilities': { icon: <Zap size={14} />, bg: 'bg-violet-100', text: 'text-violet-700' },
-    'Entertainment': { icon: <Film size={14} />, bg: 'bg-pink-100', text: 'text-pink-700' },
-    'Shopping': { icon: <ShoppingCart size={14} />, bg: 'bg-rose-100', text: 'text-rose-700' },
-    'Travel': { icon: <Plane size={14} />, bg: 'bg-cyan-100', text: 'text-cyan-700' },
-    'Health': { icon: <Heart size={14} />, bg: 'bg-red-100', text: 'text-red-700' },
-    'Healthcare': { icon: <Heart size={14} />, bg: 'bg-red-100', text: 'text-red-700' },
-    'Bills & Subscriptions': { icon: <FileText size={14} />, bg: 'bg-orange-100', text: 'text-orange-700' },
-};
-const getCat = (c?: string) =>
-    CAT[c ?? ''] ?? { icon: <Tag size={14} />, bg: 'bg-gray-100', text: 'text-gray-600' };
-
 // ── Formatters ─────────────────────────────────────────────────────────────
 const fmt = (v: number) =>
-    `$${Math.abs(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `€${Math.abs(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const fmtDate = (raw?: string) => {
     if (!raw) return '—';
@@ -193,7 +175,7 @@ const ParticipantsModal: React.FC<{ expense: any; onClose: () => void }> = ({ ex
                                     </span>
                                     {p.amount > 0 && (
                                         <span className="text-[10px] font-semibold text-secondary/40">
-                                            ${Number(p.amount).toFixed(2)}
+                                            €{Number(p.amount).toFixed(2)}
                                         </span>
                                     )}
                                 </div>
@@ -312,7 +294,7 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                                 if (!expense) return null;
 
                                 const isPayer = String(expense.payer_id ?? '').toLowerCase() === uid;
-                                const catStyle = getCat(expense.category);
+                                const catStyle = getTableCatStyle(expense.category, 14);
                                 const preview: string[] = expense.participants_preview ?? [];
                                 const hasParticipants = (expense.participants ?? []).length > 0;
 
@@ -357,33 +339,38 @@ const ExpenseHistoryCard: React.FC<Props> = ({
 
                                         {/* Participants */}
                                         <td className="px-4 py-2 align-middle overflow-hidden">
-                                            {hasParticipants ? (
-                                                <button
-                                                    onClick={() => setModalExpense(expense)}
-                                                    className="flex items-center gap-1.5 group"
-                                                    title="View all participants"
-                                                >
-                                                    <div className="w-5 h-5 rounded-full bg-primary/5 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
-                                                        <Users size={10} className="text-primary/40" />
-                                                    </div>
-                                                    <div className="flex flex-col items-start min-w-0">
-                                                        <span className="text-[11px] font-bold text-secondary/60 truncate group-hover:text-primary/70 transition-colors">
-                                                            {(() => {
-                                                                const allP: any[] = expense.participants ?? [];
-                                                                const meP = allP.find((p: any) => p.is_me && p.status !== 'PAYER');
-                                                                const others = allP.filter((p: any) => !p.is_me && p.status !== 'PAYER');
-                                                                const sorted = meP ? ['You', ...others.slice(0, 1).map((p: any) => p.user_name)] : others.slice(0, 2).map((p: any) => p.user_name);
-                                                                return sorted.length > 0 ? sorted.join(', ') : '—';
-                                                            })()}
+                                            {hasParticipants ? (() => {
+                                                const allP: any[] = expense.participants ?? [];
+                                                const nonPayers = allP.filter((p: any) => p.status !== 'PAYER');
+                                                const count = nonPayers.length;
+                                                const avatarSlice = nonPayers.slice(0, 3);
+                                                return (
+                                                    <button
+                                                        onClick={() => setModalExpense(expense)}
+                                                        className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-secondary/10 bg-secondary/[0.03] hover:bg-secondary/8 hover:border-secondary/20 transition-all group"
+                                                        title="View all participants"
+                                                    >
+                                                        {/* Mini avatar stack */}
+                                                        <div className="flex -space-x-1.5">
+                                                            {avatarSlice.map((p: any, i: number) => (
+                                                                <div
+                                                                    key={i}
+                                                                    className="w-5 h-5 rounded-full border border-white bg-primary/10 flex items-center justify-center text-[8px] font-black text-primary/50 shrink-0"
+                                                                    title={p.is_me ? 'You' : p.user_name}
+                                                                >
+                                                                    {p.is_me ? 'Y' : (p.user_name ?? 'U').charAt(0).toUpperCase()}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        {/* Count */}
+                                                        <span className="text-[10px] font-bold text-secondary/50 group-hover:text-secondary/70 transition-colors whitespace-nowrap">
+                                                            {count} {count === 1 ? 'person' : 'people'}
                                                         </span>
-                                                        {(expense.participants ?? []).filter((p: any) => p.status !== 'PAYER').length > 2 && (
-                                                            <span className="text-[9px] font-semibold text-secondary/30">
-                                                                +{(expense.participants ?? []).filter((p: any) => p.status !== 'PAYER').length - 2} more
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                            ) : (
+                                                        {/* Chevron */}
+                                                        <ChevronRight size={10} className="text-secondary/30 group-hover:text-secondary/50 transition-colors shrink-0" />
+                                                    </button>
+                                                );
+                                            })() : (
                                                 <span className="text-[11px] text-secondary/30">—</span>
                                             )}
                                         </td>
@@ -393,10 +380,10 @@ const ExpenseHistoryCard: React.FC<Props> = ({
                                             {(expense.my_share ?? 0) > 0 ? (
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-primary/70">
-                                                        ${Number(expense.my_share).toFixed(2)}
+                                                        €{Number(expense.my_share).toFixed(2)}
                                                     </span>
                                                     <span className="text-[9px] font-semibold text-secondary/35">
-                                                        of ${Number(expense.total_amount ?? expense.amount ?? 0).toFixed(2)}
+                                                        of €{Number(expense.total_amount ?? expense.amount ?? 0).toFixed(2)}
                                                     </span>
                                                 </div>
                                             ) : (

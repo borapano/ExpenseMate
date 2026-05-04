@@ -9,7 +9,7 @@ interface Props {
 }
 
 const fmt = (v: number) =>
-    `$${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `€${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ── Confirmation Modal ─────────────────────────────────────────────────────
 interface ModalState {

@@ -18,7 +18,7 @@ const SettleUpModal: React.FC<Props> = ({ isOpen, onClose, onConfirm, receiverNa
     if (!isOpen) return null;
 
     const fmt = (v?: number) =>
-        `$${Number(v ?? 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        `€${Number(v ?? 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const handleConfirm = async () => {
         setProcessing(true);

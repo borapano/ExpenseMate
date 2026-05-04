@@ -254,7 +254,7 @@ const Expenses: React.FC = () => {
 
             {/* Main */}
             <main className="flex-1 flex flex-col overflow-hidden">
-                <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4">
+                <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4 border-b border-secondary/10 shrink-0">
                     <div>
                         <h1 className="text-xl font-black text-primary tracking-tight">Expenses</h1>
                         <p className="text-sm text-secondary/70 font-semibold mt-0.5">Manage your transactions</p>
@@ -269,7 +269,7 @@ const Expenses: React.FC = () => {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto px-8 pb-10 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-8 pt-6 pb-10 space-y-6 custom-scrollbar">
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

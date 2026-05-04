@@ -197,16 +197,6 @@ const ActivityFeed = () => {
     refreshAllData();
   }, [refreshAllData]);
 
-  if (loading && !stats) {
-    return (
-      <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary items-center justify-center">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="w-12 h-12 bg-primary rounded-xl" />
-          <p className="text-sm font-black text-primary/40 uppercase tracking-widest">Loading Analytics...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary relative">
@@ -253,7 +243,7 @@ const ActivityFeed = () => {
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4 border-b border-secondary/10">
+        <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4 border-b border-secondary/10 shrink-0">
           <div><h1 className="text-xl font-black">Spending Overview</h1><p className="text-sm text-secondary/70 font-semibold">Your real-time financial analysis</p></div>
           <div className="flex items-center gap-4">
             <MonthlyBudgetEditor
@@ -271,47 +261,39 @@ const ActivityFeed = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-8 pb-12 space-y-8 custom-scrollbar">
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center py-20 text-secondary/40 font-semibold animate-pulse">Loading analytics data...</div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                <TotalSpentCard amount={stats?.totalSpentMonth || 0} previousMonthAmount={stats?.totalSpentLastMonth || 0} />
-                <TopCategoryCard categoryName={stats?.topCategory?.name || 'N/A'} monthlySpend={stats?.topCategory?.amount || 0} allCategories={charts?.categorySplit || []} />
-                <BudgetRemainingCard remainingAmount={monthlyBudget - (stats?.totalSpentMonth || 0)} totalBudget={monthlyBudget} spentAmount={stats?.totalSpentMonth || 0} />
-                <BudgetProgressCard spentAmount={stats?.totalSpentMonth || 0} totalBudget={monthlyBudget} />
-              </div>
+        <div className="flex-1 overflow-y-auto px-8 pt-6 pb-12 space-y-8 custom-scrollbar">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+            <TotalSpentCard amount={stats?.totalSpentMonth || 0} previousMonthAmount={stats?.totalSpentLastMonth || 0} />
+            <TopCategoryCard categoryName={stats?.topCategory?.name || 'N/A'} monthlySpend={stats?.topCategory?.amount || 0} allCategories={charts?.categorySplit || []} />
+            <BudgetRemainingCard remainingAmount={monthlyBudget - (stats?.totalSpentMonth || 0)} totalBudget={monthlyBudget} spentAmount={stats?.totalSpentMonth || 0} />
+            <BudgetProgressCard spentAmount={stats?.totalSpentMonth || 0} totalBudget={monthlyBudget} />
+          </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2"><ChartCard title="Daily Expense Trends"><DailyExpenseChart data={charts?.dailyTrends || []} /></ChartCard></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="md:col-span-2"><ChartCard title="Daily Expense Trends"><DailyExpenseChart data={charts?.dailyTrends || []} /></ChartCard></div>
 
-                {/* CATEGORY DISTRIBUTION - SINKRONIZUAR ME categoryPalette */}
-                <ChartCard
-                  title="Category Distribution"
-                  legend={(charts?.categorySplit || []).map((d, index) => ({
-                    name: d.name,
-                    color: categoryPalette[index % categoryPalette.length]
-                  }))}
-                >
-                  <CategoryPieChart data={charts?.categorySplit || []} />
-                </ChartCard>
+            <ChartCard
+              title="Category Distribution"
+              legend={(charts?.categorySplit || []).map((d, index) => ({
+                name: d.name,
+                color: categoryPalette[index % categoryPalette.length]
+              }))}
+            >
+              <CategoryPieChart data={charts?.categorySplit || []} />
+            </ChartCard>
 
-                {/* GROUP SPENDING - TANI I SINKRONIZUAR ME groupPalette */}
-                <ChartCard
-                  title="Group Spending"
-                  legend={(charts?.groupSpending || []).map((d, index) => ({
-                    name: d.name,
-                    color: groupPalette[index % groupPalette.length]
-                  }))}
-                >
-                  <GroupSpendingChart data={charts?.groupSpending || []} />
-                </ChartCard>
+            <ChartCard
+              title="Group Spending"
+              legend={(charts?.groupSpending || []).map((d, index) => ({
+                name: d.name,
+                color: groupPalette[index % groupPalette.length]
+              }))}
+            >
+              <GroupSpendingChart data={charts?.groupSpending || []} />
+            </ChartCard>
 
-                <div className="md:col-span-2"><ChartCard title="Monthly Comparison"><MonthlyComparisonChart data={charts?.monthlyComparison || []} /></ChartCard></div>
-              </div>
-            </>
-          )}
+            <div className="md:col-span-2"><ChartCard title="Monthly Comparison"><MonthlyComparisonChart data={charts?.monthlyComparison || []} /></ChartCard></div>
+          </div>
         </div>
       </main>
     </div>

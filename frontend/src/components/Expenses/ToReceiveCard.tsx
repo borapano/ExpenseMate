@@ -7,7 +7,7 @@ interface Props {
 }
 
 const fmt = (v: number) =>
-    `$${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `€${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const ToReceiveCard: React.FC<Props> = ({ totalToReceive, pendingReceived }) => (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-secondary/10 flex flex-col gap-4 relative overflow-hidden hover:shadow-md transition-shadow">

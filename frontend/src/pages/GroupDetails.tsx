@@ -4,7 +4,7 @@ import api from '../api';
 import { useAuth } from '../AuthContext';
 import { useData } from '../DataContext';
 import {
-    AlertCircle, ChevronRight, Users, ShieldCheck, LayoutDashboard, Activity, CreditCard, LogOut,
+    AlertCircle, ChevronRight, Users, ShieldCheck, LayoutDashboard, Activity, CreditCard, LogOut, ArrowLeft, Copy, Check, Crown,
 } from 'lucide-react';
 
 import {
@@ -44,10 +44,19 @@ const GroupDetails: React.FC = () => {
     const { refreshAllData, groups } = useData();
     const recentGroups = [...(groups || [])].sort((a, b) => Number(b.id) - Number(a.id));
 
-    const [group, setGroup] = useState<any>(null);
-    const [pageLoading, setPageLoading] = useState(true);
+    // Inicializojmë menjëherë nga cache i DataContext
+    const cachedGroup = (groups || []).find((g: any) => String(g.id) === String(id));
+    const [group, setGroup] = useState<any>(cachedGroup ?? null);
     const [error, setError] = useState<string | null>(null);
     const [toast, setToast] = useState<{ title: string; type: 'success' | 'error' } | null>(null);
+    const [copied, setCopied] = useState(false);
+
+    const copyCode = () => {
+        if (!group?.code) return;
+        navigator.clipboard.writeText(group.code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     const showToast = (title: string, type: 'success' | 'error' = 'success') => {
         setToast({ title, type });
@@ -62,13 +71,10 @@ const GroupDetails: React.FC = () => {
             setError(null);
         } catch {
             setError('Group not found or you lack access.');
-        } finally {
-            setPageLoading(false);
         }
     }, [id]);
 
     useEffect(() => {
-        setPageLoading(true);
         fetchGroup();
     }, [fetchGroup]);
 
@@ -80,25 +86,9 @@ const GroupDetails: React.FC = () => {
         return !debts.some((d: any) => !d.is_pending) && incoming.length === 0;
     })();
 
-    // ── Loading ───────────────────────────────────────────────────────────────
-    if (pageLoading) {
-        return (
-            <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
-                <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0 opacity-60" />
-                <main className="flex-1 p-8 space-y-5 animate-pulse">
-                    <div className="h-5 w-44 bg-secondary/10 rounded-lg" />
-                    <div className="h-36 bg-white rounded-2xl shadow-sm" />
-                    <div className="grid grid-cols-3 gap-4">
-                        {[0,1,2].map(i => <div key={i} className="h-32 bg-white rounded-2xl shadow-sm" />)}
-                    </div>
-                    <div className="h-[624px] bg-white rounded-2xl shadow-sm" />
-                </main>
-            </div>
-        );
-    }
 
     // ── Error ─────────────────────────────────────────────────────────────────
-    if (error || !group) {
+    if (error) {
         return (
             <div className="flex min-h-screen bg-[#F7F4F0] font-sans">
                 <aside className="w-64 bg-primary hidden md:flex shrink-0" />
@@ -176,11 +166,10 @@ const GroupDetails: React.FC = () => {
             <main className="flex-1 flex flex-col overflow-hidden">
 
                 {/* Header */}
-                <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4 shrink-0">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-secondary/60">
-                        <button onClick={() => navigate('/groups')} className="hover:text-primary transition-colors">Groups</button>
-                        <ChevronRight size={14} className="text-secondary/30" />
-                        <span className="text-primary font-black truncate max-w-[200px]">{group.name}</span>
+                <header className="px-8 py-6 flex items-center justify-between shrink-0 border-b border-secondary/10">
+                    <div>
+                        <h1 className="text-xl font-black text-primary tracking-tight">{group?.name ?? ''}</h1>
+                        <p className="text-sm text-secondary/70 font-semibold mt-0.5">Manage your group expenses</p>
                     </div>
                     <div className="flex items-center gap-3 bg-white p-1 pr-4 rounded-full shadow-sm border border-secondary/10">
                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-accent text-xs font-bold">
@@ -191,17 +180,16 @@ const GroupDetails: React.FC = () => {
                 </header>
 
                 {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto px-8 pb-12 flex flex-col gap-5 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-8 pt-6 pb-12 flex flex-col gap-5 custom-scrollbar">
 
+                  {group && <>
                     {/* ROW 1: Group Info */}
                     <GroupInfoCard
                         group={group}
                         currentUser={currentUser}
-                        canLeave={canLeave}
                         onToast={showToast}
                         onGroupUpdated={async () => { await fetchGroup(); refreshAllData(); }}
                         onGroupDeleted={() => { refreshAllData(); navigate('/groups'); }}
-                        onLeaveGroup={() => { refreshAllData(); navigate('/groups'); }}
                     />
 
                     {/* ROW 2: My Spendings | Net Balance | Members Summary */}
@@ -237,6 +225,7 @@ const GroupDetails: React.FC = () => {
                             />
                         </div>
                     </div>
+                  </>}
 
                 </div>
             </main>

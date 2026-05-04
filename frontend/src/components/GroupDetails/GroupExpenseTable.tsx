@@ -1,29 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import {
-    Plus, Receipt, Tag, Users,
+    Plus, Receipt, Users,
     Edit2, Trash2, X, AlertTriangle,
-    Utensils, ShoppingBasket, Car, Home, Zap, Film,
-    ShoppingCart, Plane, Heart, FileText,
 } from 'lucide-react';
 import api from '../../api';
 import ExpenseForm from '../ExpenseForm';
-
-// ── Category map ──────────────────────────────────────────────────────────────
-const CAT: Record<string, { icon: React.ReactNode; bg: string; text: string }> = {
-    'Food & Dining':        { icon: <Utensils size={13} />,      bg: 'bg-amber-100',   text: 'text-amber-700'   },
-    'Groceries':            { icon: <ShoppingBasket size={13} />, bg: 'bg-emerald-100', text: 'text-emerald-700' },
-    'Transportation':       { icon: <Car size={13} />,            bg: 'bg-sky-100',     text: 'text-sky-700'     },
-    'Transport':            { icon: <Car size={13} />,            bg: 'bg-sky-100',     text: 'text-sky-700'     },
-    'Housing':              { icon: <Home size={13} />,           bg: 'bg-indigo-100',  text: 'text-indigo-700'  },
-    'Utilities':            { icon: <Zap size={13} />,            bg: 'bg-violet-100',  text: 'text-violet-700'  },
-    'Entertainment':        { icon: <Film size={13} />,           bg: 'bg-pink-100',    text: 'text-pink-700'    },
-    'Shopping':             { icon: <ShoppingCart size={13} />,   bg: 'bg-rose-100',    text: 'text-rose-700'    },
-    'Travel':               { icon: <Plane size={13} />,          bg: 'bg-cyan-100',    text: 'text-cyan-700'    },
-    'Health':               { icon: <Heart size={13} />,          bg: 'bg-red-100',     text: 'text-red-700'     },
-    'Healthcare':           { icon: <Heart size={13} />,          bg: 'bg-red-100',     text: 'text-red-700'     },
-    'Bills & Subscriptions':{ icon: <FileText size={13} />,       bg: 'bg-orange-100',  text: 'text-orange-700'  },
-};
-const getCat = (c?: string) => CAT[c ?? ''] ?? { icon: <Tag size={13} />, bg: 'bg-gray-100', text: 'text-gray-500' };
+// @ts-ignore
+import { getTableCatStyle } from '../../utils/categoryMap';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtAmt = (v: number) =>
@@ -289,7 +272,7 @@ const GroupExpenseTable: React.FC<Props> = ({ group, currentUser, onRefresh, onR
                             {expenses.map((expense: any) => {
                                 if (!expense) return null;
                                 const isPayer = String(expense.payer_id) === uid;
-                                const cat = getCat(expense.category);
+                                const cat = getTableCatStyle(expense.category);
                                 const myParticipant = (expense.participants || []).find(
                                     (p: any) => String(p.user_id) === uid
                                 );

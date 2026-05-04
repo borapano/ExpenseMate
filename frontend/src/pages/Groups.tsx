@@ -77,21 +77,6 @@ const Groups: React.FC = () => {
         }
     };
 
-    if (loading) {
-        return (
-            <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary">
-                <aside className="w-64 bg-primary text-white flex-col hidden md:flex shrink-0 opacity-80" />
-                <main className="flex-1 flex flex-col p-8 gap-8 animate-pulse">
-                    <div className="h-8 w-48 bg-secondary/10 rounded-xl" />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="h-40 bg-white rounded-2xl shadow-sm" />
-                        <div className="h-40 bg-white rounded-2xl shadow-sm" />
-                    </div>
-                    <div className="h-96 bg-white rounded-2xl shadow-sm" />
-                </main>
-            </div>
-        );
-    }
 
     return (
         <div className="flex min-h-screen bg-[#F7F4F0] font-sans text-primary relative">
@@ -150,7 +135,7 @@ const Groups: React.FC = () => {
 
             {/* ── MAIN CONTENT ── */}
             <main className="flex-1 flex flex-col overflow-hidden">
-                <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4">
+                <header className="px-8 py-6 flex flex-wrap items-center justify-between gap-4 border-b border-secondary/10 shrink-0">
                     <div>
                         <h1 className="text-xl font-black text-primary tracking-tight">Groups</h1>
                         <p className="text-sm text-secondary/70 font-semibold mt-0.5">Create, join and manage your expense groups</p>
@@ -163,7 +148,7 @@ const Groups: React.FC = () => {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto px-8 pb-10 space-y-8 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-8 pt-6 pb-10 space-y-8 custom-scrollbar">
 
                     {/* ── TOP SECTION: ACTION CARDS ── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

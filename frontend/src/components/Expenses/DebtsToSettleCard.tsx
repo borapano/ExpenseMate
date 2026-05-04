@@ -8,7 +8,7 @@ interface Props {
 }
 
 const fmt = (v: number) =>
-    `$${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `€${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const DebtsToSettleCard: React.FC<Props> = ({ payables, payingDebts, onPay }) => {
     const debts = Array.isArray(payables) ? payables : [];
